@@ -20,7 +20,7 @@ ln -sf ~/git-repos/git-worktree-manager/worktree ~/.local/bin/worktree
 ### Create worktrees
 
 ```bash
-cd ~/git-repos/community-mobility
+cd ~/git-repos/my-project
 worktree create feature-login
 ```
 
@@ -72,15 +72,15 @@ Worktrees are placed outside the project directory to avoid search noise:
 
 ```
 ~/git-repos/
-├── community-mobility/                    # Original project
+├── my-project/                            # Original project
 │   ├── CLAUDE.md
-│   ├── mobipf-admin/
-│   └── mobipf-backend/
-├── community-mobility.worktrees/          # Worktrees (outside repo)
+│   ├── frontend/
+│   └── backend/
+├── my-project.worktrees/                  # Worktrees (outside repo)
 │   └── task-A/
 │       ├── CLAUDE.md → symlink to original CLAUDE.md
-│       ├── mobipf-admin/   (git worktree, branch: task-A)
-│       └── mobipf-backend/ (git worktree, branch: task-A)
+│       ├── frontend/   (git worktree, branch: task-A)
+│       └── backend/    (git worktree, branch: task-A)
 ```
 
 ## .worktreerc Hook
@@ -90,8 +90,8 @@ Place a `.worktreerc` file in the project root. The `post_create()` function run
 ```bash
 # .worktreerc example
 post_create() {
-    ln -sf EcAuthDocs/claude-repository-guide.md CLAUDE.md
-    ln -sf EcAuthDocs/update-repos.sh update-repos.sh
+    ln -sf shared-docs/claude-repository-guide.md CLAUDE.md
+    ln -sf shared-docs/setup.sh setup.sh
 }
 ```
 
