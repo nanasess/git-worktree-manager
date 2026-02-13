@@ -74,6 +74,7 @@ cmd_install() {
     echo ""
 
     local installed=0
+    mkdir -p "$target_dir"
 
     for skill_dir in "$skills_src"/*/; do
         [ -d "$skill_dir" ] || continue
@@ -81,16 +82,14 @@ cmd_install() {
         skill_name="$(basename "$skill_dir")"
         local dest="${target_dir}/${skill_name}"
 
+        local msg_verb="インストールしました"
         if [ -d "$dest" ]; then
             # 既存のスキルを更新
             rm -rf "$dest"
-            cp -r "$skill_dir" "$dest"
-            log_success "${skill_name}: 更新しました"
-        else
-            mkdir -p "$target_dir"
-            cp -r "$skill_dir" "$dest"
-            log_success "${skill_name}: インストールしました"
+            msg_verb="更新しました"
         fi
+        cp -r "$skill_dir" "$dest"
+        log_success "${skill_name}: ${msg_verb}"
         installed=$((installed + 1))
     done
 
