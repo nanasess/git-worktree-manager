@@ -17,6 +17,7 @@ source "$SCRIPT_DIR/lib/deps.sh"
 source "$SCRIPT_DIR/lib/cmd_create.sh"
 source "$SCRIPT_DIR/lib/cmd_list.sh"
 source "$SCRIPT_DIR/lib/cmd_cleanup.sh"
+source "$SCRIPT_DIR/lib/cmd_install.sh"
 
 VERSION="0.1.0"
 
@@ -30,6 +31,7 @@ usage() {
     echo "    create <task-name>    タスク用の worktree を一括作成"
     echo "    list                  現在の worktree 一覧を表示"
     echo "    cleanup [task-name]   worktree を一括削除"
+    echo "    install --skills      Claude Code skills をプロジェクトにインストール"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
     echo "    -h, --help            ヘルプを表示"
@@ -57,6 +59,9 @@ main() {
             ;;
         cleanup|clean|rm)
             cmd_cleanup "$@"
+            ;;
+        install)
+            cmd_install "$@"
             ;;
         -h|--help|help)
             usage
