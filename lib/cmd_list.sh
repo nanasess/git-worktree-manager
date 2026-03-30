@@ -52,10 +52,8 @@ cmd_list() {
     local task_names=()
     while IFS= read -r git_marker; do
         # git_marker は <worktrees_base>/<task_name>/<repo>/.git のようなパス
-        local repo_dir
-        repo_dir="$(dirname "$git_marker")"
-        local task_dir
-        task_dir="$(dirname "$repo_dir")"
+        local repo_dir="${git_marker%/*}"
+        local task_dir="${repo_dir%/*}"
         # worktrees_base からの相対パスがタスク名
         local task_name="${task_dir#"$worktrees_base"/}"
 
