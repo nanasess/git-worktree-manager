@@ -81,7 +81,7 @@ cmd_pull() {
 
         # git pull
         local pull_output
-        if pull_output=$(git -C "$repo_path" pull 2>&1); then
+        if pull_output=$(LC_ALL=C git -C "$repo_path" pull --ff-only 2>&1); then
             if echo "$pull_output" | grep -q "Already up to date"; then
                 log_success "  最新です"
                 RESULTS["$repo"]="OK: 最新"
