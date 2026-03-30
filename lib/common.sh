@@ -27,9 +27,24 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# プロジェクトルートのパスを取得（カレントディレクトリ）
+# プロジェクトルートのパスを取得
+# .worktrees ディレクトリ内から実行された場合は元のプロジェクトルートを返す
 get_project_root() {
-    echo "$(pwd)"
+    local cwd
+    cwd="$(pwd)"
+    # パスに .worktrees が含まれる場合、元のプロジェクトルートを算出
+    case "$cwd" in
+        *.worktrees/*)
+            local worktrees_dir="${cwd%%\.worktrees/*}.worktrees"
+            echo "$(dirname "$worktrees_dir")/$(basename "${worktrees_dir%.worktrees}")"
+            ;;
+        *.worktrees)
+            echo "$(dirname "$cwd")/$(basename "${cwd%.worktrees}")"
+            ;;
+        *)
+            echo "$cwd"
+            ;;
+    esac
 }
 
 # プロジェクト名を取得（ディレクトリ名）
