@@ -47,14 +47,35 @@ cmd_list() {
         return 0
     fi
 
-    local has_tasks=false
+    # worktrees_base 配下から git worktree を含むタスクディレクトリを探索
+    # タスク名にスラッシュが含まれる場合（例: feature/task-name）にも対応
+    local task_names=()
+    while IFS= read -r git_marker; do
+        # git_marker は <worktrees_base>/<task_name>/<repo>/.git のようなパス
+        local repo_dir="${git_marker%/*}"
+        local task_dir="${repo_dir%/*}"
+        # worktrees_base からの相対パスがタスク名
+        local task_name="${task_dir#"$worktrees_base"/}"
 
-    for task_dir in "$worktrees_base"/*/; do
-        [ -d "$task_dir" ] || continue
-        has_tasks=true
-        task_dir="${task_dir%/}"
-        local task_name
-        task_name="$(basename "$task_dir")"
+        # 重複チェック
+        local found=false
+        for existing in "${task_names[@]}"; do
+            if [ "$existing" = "$task_name" ]; then
+                found=true
+                break
+            fi
+        done
+        if [ "$found" = false ]; then
+            task_names+=("$task_name")
+        fi
+    done < <(find "$worktrees_base" -name ".git" -mindepth 3 2>/dev/null | sort)
+
+    if [ ${#task_names[@]} -eq 0 ]; then
+        log_info "worktree はありません"
+    fi
+
+    for task_name in "${task_names[@]}"; do
+        local task_dir="${worktrees_base}/${task_name}"
 
         echo ""
         echo -e "  ${BOLD}${task_name}${NC}"
@@ -83,7 +104,7 @@ cmd_list() {
 
             # 未追跡ファイルがあるか確認
             local untracked
-            untracked="$(git -C "$repo_dir" ls-files --others --exclude-standard 2>/dev/null | head -1)"
+            untracked="$( (git -C "$repo_dir" ls-files --others --exclude-standard 2>/dev/null || true) | head -1)"
             if [ -n "$untracked" ]; then
                 status_icon="${status_icon} ${YELLOW}[未追跡]${NC}"
             fi
@@ -92,9 +113,6 @@ cmd_list() {
         done
     done
 
-    if [ "$has_tasks" = false ]; then
-        log_info "worktree はありません"
-    fi
-
     echo ""
+    return 0
 }
