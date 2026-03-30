@@ -53,6 +53,40 @@ get_task_dir() {
     echo "$(get_worktrees_base)/${task_name}"
 }
 
+# CLAUDE.md にワークツリーコンテキストを付加して生成
+# /compact 後もエージェントが作業ディレクトリを忘れないようにする
+generate_worktree_claude_md() {
+    local src="$1"
+    local dst="$2"
+    local task_name="$3"
+    local task_dir="$4"
+    local project_root="$5"
+
+    {
+        cat <<WORKTREE_CONTEXT
+# Worktree Context
+
+このディレクトリは \`worktree create ${task_name}\` で作成された作業用ワークツリーです。
+
+- **タスク名**: ${task_name}
+- **作業ディレクトリ**: ${task_dir}
+- **プロジェクトルート（参照元）**: ${project_root}
+
+> **重要**: すべてのコード変更は必ずこのディレクトリ (\`${task_dir}\`) 内で行ってください。
+> プロジェクトルート (\`${project_root}\`) を直接変更しないでください。
+
+## 動作確認
+
+このワークツリーには Docker Compose 環境がありません。
+動作確認が必要な場合は、プロジェクトルート (\`${project_root}\`) で該当ブランチをチェックアウトして行ってください。
+
+---
+
+WORKTREE_CONTEXT
+        cat "$src"
+    } > "$dst"
+}
+
 # 結果サマリ表示用
 # Usage: declare -A RESULTS を事前に行い、print_summary RESULTS repo_list
 print_summary() {

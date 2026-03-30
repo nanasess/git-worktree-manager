@@ -166,8 +166,14 @@ cmd_create() {
             local src="${project_root}/${item}"
             local dst="${task_dir}/${item}"
             if [ ! -e "$dst" ]; then
-                ln -sf "$src" "$dst"
-                log_info "  ${item} → ${src}"
+                if [ "$item" = "CLAUDE.md" ]; then
+                    # CLAUDE.md はワークツリーコンテキストを付加した実ファイルを生成
+                    generate_worktree_claude_md "$src" "$dst" "$task_name" "$task_dir" "$project_root"
+                    log_info "  ${item} → 生成（worktree コンテキスト付き）"
+                else
+                    ln -sf "$src" "$dst"
+                    log_info "  ${item} → ${src}"
+                fi
             fi
         done
     fi
