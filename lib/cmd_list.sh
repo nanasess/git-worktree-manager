@@ -114,7 +114,10 @@ cmd_list() {
 
                 # Check for untracked files
                 local untracked
-                untracked="$( (git -C "$repo_dir" ls-files --others --exclude-standard 2>/dev/null || true) | head -1)"
+                untracked=$(git -C "$repo_dir" ls-files --others --exclude-standard 2>/dev/null | head -n 1)
+                if [ "${PIPESTATUS[0]}" -ne 0 ] && [ "${PIPESTATUS[0]}" -ne 141 ]; then
+                    untracked=""
+                fi
                 if [ -n "$untracked" ]; then
                     status_icon="${status_icon} ${YELLOW}[untracked]${NC}"
                 fi

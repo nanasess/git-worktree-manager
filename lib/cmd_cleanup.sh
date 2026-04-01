@@ -163,7 +163,7 @@ is_task_merged() {
         default_branch="$(detect_default_branch "$main_repo" 2>/dev/null)" || continue
 
         # Check if branch is merged into default branch
-        if ! git -C "$main_repo" branch --merged "origin/${default_branch}" 2>/dev/null | grep -qw "$branch"; then
+        if ! git -C "$main_repo" branch --merged "origin/${default_branch}" 2>/dev/null | grep -Fqw "$branch"; then
             return 1
         fi
     done
@@ -273,15 +273,27 @@ cleanup_task() {
         fi
     done
 
-    # Remove task directory
+    # Remove task directory (only if all worktree removals succeeded)
     if [ "$dry_run" = false ]; then
-        rm -rf "$task_dir"
-        log_success "Removed task directory: ${task_dir}"
+        local has_failure=false
+        for rn in "${repo_names[@]}"; do
+            if [[ "${RESULTS[$rn]:-}" == FAIL:* ]]; then
+                has_failure=true
+                break
+            fi
+        done
 
-        # Remove empty worktrees base directory
-        if [ -d "$worktrees_base" ] && [ -z "$(ls -A "$worktrees_base")" ]; then
-            rmdir "$worktrees_base"
-            log_info "Removed empty worktrees directory: ${worktrees_base}"
+        if [ "$has_failure" = true ]; then
+            log_warn "Skipped task directory removal due to worktree removal failures"
+        else
+            rm -rf "$task_dir"
+            log_success "Removed task directory: ${task_dir}"
+
+            # Remove empty worktrees base directory
+            if [ -d "$worktrees_base" ] && [ -z "$(ls -A "$worktrees_base")" ]; then
+                rmdir "$worktrees_base"
+                log_info "Removed empty worktrees directory: ${worktrees_base}"
+            fi
         fi
     else
         log_info "[DRY RUN] Remove task directory: ${task_dir}"

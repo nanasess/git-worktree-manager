@@ -134,7 +134,8 @@ cmd_create() {
 
         # Fetch
         log_info "  git fetch origin..."
-        if ! git -C "$repo_path" fetch origin 2>&1 | head -5; then
+        git -C "$repo_path" fetch origin 2>&1 | head -n 5
+        if [ "${PIPESTATUS[0]}" -ne 0 ] && [ "${PIPESTATUS[0]}" -ne 141 ]; then
             log_warn "  Fetch failed (continuing)"
         fi
 
