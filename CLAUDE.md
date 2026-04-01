@@ -37,3 +37,12 @@ create 時に CLAUDE.md へ Worktree Context（タスク名、作業ディレク
 プロジェクトルートに `.worktreerc` を配置し、`post_create()` 関数を定義すると、worktree 作成後に自動実行されます。
 
 環境変数: `WORKTREE_TASK_NAME`, `WORKTREE_TASK_DIR`, `WORKTREE_PROJECT_ROOT`
+
+## テスト
+
+bats-core を使用（git submodule として管理）。
+
+```bash
+git submodule update --init --recursive
+./test/bats/bin/bats test/*.bats
+```

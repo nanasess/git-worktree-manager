@@ -153,6 +153,24 @@ Environment variables available in hooks:
 
 Use `--no-install` to skip.
 
+## Testing
+
+Tests use [bats-core](https://github.com/bats-core/bats-core) (included as git submodules).
+
+```bash
+# Initialize submodules (first time only)
+git submodule update --init --recursive
+
+# Run all tests
+./test/bats/bin/bats test/*.bats
+
+# Run single-repo tests only
+./test/bats/bin/bats test/single_repo.bats
+
+# Run multi-repo tests only
+./test/bats/bin/bats test/multi_repo.bats
+```
+
 ## License
 
 MIT
