@@ -3,13 +3,28 @@
 # detect.sh - プロジェクト検出・リポジトリ列挙
 #
 
+# プロジェクトルート自体が git リポジトリかどうかを判定
+is_single_repo() {
+    local project_root
+    project_root="$(get_project_root)"
+    [ -d "$project_root/.git" ] || [ -f "$project_root/.git" ]
+}
+
 # プロジェクトルート配下の git リポジトリを列挙
-# 直下のサブディレクトリで .git が存在するものを返す
+# 単一リポジトリの場合は "." を返す
+# 複数リポジトリの場合は直下のサブディレクトリ名を返す
 list_git_repos() {
     local project_root
     project_root="$(get_project_root)"
-    local repos=()
 
+    # 単一リポジトリ: project_root 自体が .git を持つ
+    if is_single_repo; then
+        echo "."
+        return
+    fi
+
+    # 複数リポジトリ: 直下のサブディレクトリを走査
+    local repos=()
     for dir in "$project_root"/*/; do
         [ -d "$dir" ] || continue
         dir="${dir%/}"
@@ -21,9 +36,57 @@ list_git_repos() {
     echo "${repos[@]}"
 }
 
+# タスクディレクトリ内の worktree リポジトリディレクトリを列挙
+# 複数リポ: task_dir/repo1, task_dir/repo2, ...
+# 単一リポ: task_dir 自体
+list_task_repo_dirs() {
+    local task_dir="$1"
+    local dirs=()
+
+    for repo_dir in "$task_dir"/*/; do
+        [ -d "$repo_dir" ] || continue
+        repo_dir="${repo_dir%/}"
+        if [ -d "$repo_dir/.git" ] || [ -f "$repo_dir/.git" ]; then
+            dirs+=("$repo_dir")
+        fi
+    done
+
+    # 単一リポジトリ: task_dir 自体が worktree
+    if [ ${#dirs[@]} -eq 0 ]; then
+        if [ -f "$task_dir/.git" ] || [ -d "$task_dir/.git" ]; then
+            dirs+=("$task_dir")
+        fi
+    fi
+
+    echo "${dirs[@]}"
+}
+
+# worktree の repo_dir から元リポジトリのパスを算出
+get_main_repo_path() {
+    local repo_dir="$1"
+    local task_dir="$2"
+    local project_root="$3"
+
+    if [ "$repo_dir" = "$task_dir" ]; then
+        # 単一リポジトリ: 元リポは project_root 自体
+        echo "$project_root"
+    else
+        local repo_name
+        repo_name="$(basename "$repo_dir")"
+        echo "${project_root}/${repo_name}"
+    fi
+}
+
 # プロジェクトルート直下の非 git アイテム（シンボリックリンク対象）を列挙
 # .git ディレクトリを持たないファイル・ディレクトリ
+# 単一リポジトリの場合は空を返す（worktree に全ファイルが含まれるため）
 list_non_git_items() {
+    # 単一リポジトリ: worktree が全ファイルを含むのでシンボリックリンク不要
+    if is_single_repo; then
+        echo ""
+        return
+    fi
+
     local project_root
     project_root="$(get_project_root)"
     local items=()

@@ -59,18 +59,31 @@ cmd_pull() {
     echo -e " ${BOLD}worktree pull${NC}: ${project_name}"
     echo "============================================"
     echo ""
+    # 表示用リポジトリ名
+    local display_repos=()
+    for repo in "${repos[@]}"; do
+        if [ "$repo" = "." ]; then
+            display_repos+=("$project_name")
+        else
+            display_repos+=("$repo")
+        fi
+    done
+
     log_info "ディレクトリ: ${project_root}"
-    log_info "対象リポジトリ (${#repos[@]}): ${repos[*]}"
+    log_info "対象リポジトリ (${#repos[@]}): ${display_repos[*]}"
     echo ""
 
     # 結果格納
     declare -A RESULTS
 
+    local i=0
     for repo in "${repos[@]}"; do
         local repo_path="${project_root}/${repo}"
+        local display_name="${display_repos[$i]}"
+        i=$((i + 1))
 
         echo "------------------------------------------"
-        log_info "処理中: ${repo}"
+        log_info "処理中: ${display_name}"
 
         # 現在のブランチを表示
         local current_branch
@@ -84,18 +97,18 @@ cmd_pull() {
         if pull_output=$(LC_ALL=C git -C "$repo_path" pull --ff-only 2>&1); then
             if echo "$pull_output" | grep -q "Already up to date"; then
                 log_success "  最新です"
-                RESULTS["$repo"]="OK: 最新"
+                RESULTS["$display_name"]="OK: 最新"
             else
                 log_success "  pull しました"
-                RESULTS["$repo"]="OK: 更新あり"
+                RESULTS["$display_name"]="OK: 更新あり"
             fi
         else
             log_error "  pull に失敗しました"
             echo "$pull_output" | sed 's/^/    /'
-            RESULTS["$repo"]="FAIL: pull 失敗"
+            RESULTS["$display_name"]="FAIL: pull 失敗"
         fi
     done
 
     # 結果サマリ
-    print_summary RESULTS "${repos[@]}"
+    print_summary RESULTS "${display_repos[@]}"
 }
