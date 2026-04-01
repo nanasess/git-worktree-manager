@@ -46,3 +46,13 @@ bats-core を使用（git submodule として管理）。
 git submodule update --init --recursive
 ./test/bats/bin/bats test/*.bats
 ```
+
+## 言語ルール
+
+- **CLAUDE.md 以外はすべて英語** で記述する
+  - ソースコード（コメント、ログ出力、ヘルプテキスト）
+  - コミットメッセージ
+  - PR タイトル・説明
+  - Issue
+  - テストの記述
+- **CLAUDE.md のみ日本語** で記述する
