@@ -11,11 +11,9 @@ load "${BATS_TEST_DIRNAME}/test_helper/bats-assert/load"
 # 単一リポジトリのセットアップ
 setup_single_repo() {
     TEST_WORK_DIR="$(mktemp -d)"
-    SINGLE_REPO_DIR="${TEST_WORK_DIR}/git-worktree-manager"
-    WORKTREES_DIR="${TEST_WORK_DIR}/git-worktree-manager.worktrees"
-    git clone --no-hardlinks "${GITHUB_WORKSPACE:-$(cd "$(dirname "${BATS_TEST_DIRNAME}")" && pwd)}" "$SINGLE_REPO_DIR" --quiet
-    git -C "$SINGLE_REPO_DIR" remote set-head origin --auto 2>/dev/null || \
-        git -C "$SINGLE_REPO_DIR" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main 2>/dev/null || true
+    SINGLE_REPO_DIR="${TEST_WORK_DIR}/setup-chromedriver"
+    WORKTREES_DIR="${TEST_WORK_DIR}/setup-chromedriver.worktrees"
+    git clone --depth 1 https://github.com/nanasess/setup-chromedriver.git "$SINGLE_REPO_DIR" --quiet
 }
 
 # 複数リポジトリのセットアップ
