@@ -76,19 +76,32 @@ cmd_checkout() {
     echo -e " ${BOLD}worktree checkout${NC}: ${project_name}"
     echo "============================================"
     echo ""
+    # 表示用リポジトリ名
+    local display_repos=()
+    for repo in "${repos[@]}"; do
+        if [ "$repo" = "." ]; then
+            display_repos+=("$project_name")
+        else
+            display_repos+=("$repo")
+        fi
+    done
+
     log_info "ディレクトリ: ${project_root}"
-    log_info "対象リポジトリ (${#repos[@]}): ${repos[*]}"
+    log_info "対象リポジトリ (${#repos[@]}): ${display_repos[*]}"
     log_info "チェックアウト先: ${target_desc}"
     echo ""
 
     # 結果格納
     declare -A RESULTS
 
+    local i=0
     for repo in "${repos[@]}"; do
         local repo_path="${project_root}/${repo}"
+        local display_name="${display_repos[$i]}"
+        i=$((i + 1))
 
         echo "------------------------------------------"
-        log_info "処理中: ${repo}"
+        log_info "処理中: ${display_name}"
 
         # チェックアウト先ブランチを決定
         local target_branch
@@ -97,7 +110,7 @@ cmd_checkout() {
         else
             target_branch="$(detect_default_branch "$repo_path")" || {
                 log_error "  デフォルトブランチの検出に失敗しました"
-                RESULTS["$repo"]="FAIL: ブランチ検出失敗"
+                RESULTS["$display_name"]="FAIL: ブランチ検出失敗"
                 continue
             }
         fi
@@ -108,7 +121,7 @@ cmd_checkout() {
         if [ -n "$current_branch" ]; then
             if [ "$current_branch" = "$target_branch" ]; then
                 log_success "  既に ${target_branch} です"
-                RESULTS["$repo"]="OK: 変更なし"
+                RESULTS["$display_name"]="OK: 変更なし"
                 continue
             fi
             log_info "  ${current_branch} → ${target_branch}"
@@ -118,14 +131,14 @@ cmd_checkout() {
         local checkout_output
         if checkout_output=$(LC_ALL=C git -C "$repo_path" checkout "$target_branch" 2>&1); then
             log_success "  ${target_branch} にチェックアウトしました"
-            RESULTS["$repo"]="OK: ${target_branch}"
+            RESULTS["$display_name"]="OK: ${target_branch}"
         else
             log_error "  チェックアウトに失敗しました"
             echo "$checkout_output" | sed 's/^/    /'
-            RESULTS["$repo"]="FAIL: checkout 失敗"
+            RESULTS["$display_name"]="FAIL: checkout 失敗"
         fi
     done
 
     # 結果サマリ
-    print_summary RESULTS "${repos[@]}"
+    print_summary RESULTS "${display_repos[@]}"
 }
