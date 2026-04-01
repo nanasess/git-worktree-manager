@@ -57,10 +57,12 @@ Works with **single-repo** projects too:
 
 ```
 ├── my-app/                         # Single git repo
+│   ├── src/
+│   └── CLAUDE.md
 ├── my-app.worktrees/
 │   └── feature-login/              # Worktree (branch: feature-login)
 │       ├── src/
-│       └── CLAUDE.md
+│       └── CLAUDE.md               #   generated with worktree context
 ```
 
 ## Commands
