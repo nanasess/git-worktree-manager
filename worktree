@@ -19,6 +19,7 @@ source "$SCRIPT_DIR/lib/cmd_list.sh"
 source "$SCRIPT_DIR/lib/cmd_cleanup.sh"
 source "$SCRIPT_DIR/lib/cmd_install.sh"
 source "$SCRIPT_DIR/lib/cmd_pull.sh"
+source "$SCRIPT_DIR/lib/cmd_checkout.sh"
 
 VERSION="0.1.0"
 
@@ -32,6 +33,7 @@ usage() {
     echo "    create <task-name>    タスク用の worktree を一括作成"
     echo "    list                  現在の worktree 一覧を表示"
     echo "    cleanup [task-name]   worktree を一括削除"
+    echo "    checkout [branch]     配下の git リポジトリを一括でチェックアウト"
     echo "    pull                  配下の git リポジトリを一括で pull"
     echo "    install --skills      Claude Code skills をプロジェクトにインストール"
     echo ""
@@ -61,6 +63,9 @@ main() {
             ;;
         cleanup|clean|rm)
             cmd_cleanup "$@"
+            ;;
+        checkout|co)
+            cmd_checkout "$@"
             ;;
         pull)
             cmd_pull "$@"
