@@ -1,174 +1,185 @@
 # git-worktree-manager
 
-Bulk worktree management tool for projects with multiple git repositories.
+> Manage git worktrees across single or multiple repositories with a single command.
+> Pure Bash — no dependencies beyond `git` and `bash`.
 
-## Motivation
+[![CI](https://github.com/nanasess/git-worktree-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/nanasess/git-worktree-manager/actions/workflows/ci.yml)
 
-- Placing worktrees inside repositories pollutes Claude Code's code search with noise
-- Managing worktree lifecycles across multiple repositories and tasks is cumbersome
-- Dependency installation (npm, pnpm, yarn, composer, dotnet) must be done manually each time
+## Why?
 
-## Installation
+Git worktrees are great for parallel development — but managing them is painful:
+
+- **Search noise** — worktrees inside repos pollute code search (especially with AI coding tools)
+- **Multi-repo overhead** — creating/cleaning worktrees across 3+ repos is tedious
+- **Forgotten setup** — dependency installation, hooks, and config must be repeated each time
+
+`worktree` solves this with one command: create isolated workspaces, run hooks, install deps, and clean up — across all repos at once.
+
+## Quick Start
 
 ```bash
+# Install
 git clone https://github.com/nanasess/git-worktree-manager.git ~/git-repos/git-worktree-manager
 ln -sf ~/git-repos/git-worktree-manager/worktree ~/.local/bin/worktree
-```
 
-## Usage
-
-All commands can be run from the project root or from inside a `.worktrees/` directory.
-
-### Create worktrees
-
-```bash
+# Create worktrees for a task
 cd ~/git-repos/my-project
 worktree create feature-login
+
+# List, pull, checkout, cleanup
+worktree list
+worktree pull
+worktree checkout main
+worktree cleanup feature-login --force --delete-branches
 ```
 
-For every git repository under the project root:
-1. Runs `git fetch origin` to update
-2. Creates a worktree based on origin/HEAD (default branch)
-3. Generates a CLAUDE.md with worktree context (task name, working directory, project root)
-4. Symlinks non-git items into the task directory
-5. Executes `post_create()` hook from `.worktreerc` if present
-6. Auto-installs dependencies based on lock files
+## How It Works
 
-#### Options
+```
+~/git-repos/
+├── my-project/                     # Your project (single or multi-repo)
+│   ├── frontend/                   #   git repo
+│   ├── backend/                    #   git repo
+│   └── CLAUDE.md
+│
+├── my-project.worktrees/           # Worktrees live OUTSIDE the project
+│   ├── feature-login/
+│   │   ├── frontend/               #   branch: feature-login
+│   │   ├── backend/                #   branch: feature-login
+│   │   └── CLAUDE.md               #   generated with worktree context
+│   └── fix-auth/
+│       └── ...
+```
+
+Worktrees are placed **outside** the project directory — no search noise, no IDE confusion.
+
+Works with **single-repo** projects too:
+
+```
+├── my-app/                         # Single git repo
+│   ├── src/
+│   └── CLAUDE.md
+├── my-app.worktrees/
+│   └── feature-login/              # Worktree (branch: feature-login)
+│       ├── src/
+│       └── CLAUDE.md               #   generated with worktree context
+```
+
+## Commands
+
+All commands work from the project root or from inside a `.worktrees/` directory.
+
+### `worktree create <task-name>`
+
+Creates a worktree (and branch) for each repository.
+
+```bash
+worktree create feature-login
+worktree create fix-bug --branch-prefix nanasess/
+worktree create quick-test --no-install
+```
+
+What happens:
+1. `git fetch origin` on each repo
+2. Create worktree based on the default branch
+3. Generate `CLAUDE.md` with worktree context
+4. Symlink non-git items (multi-repo)
+5. Run `.worktreerc` `post_create()` hook
+6. Auto-install dependencies
 
 | Option | Description |
 |---|---|
-| `--branch-prefix <prefix>` | Add a prefix to branch names |
-| `--no-install` | Skip automatic dependency installation |
+| `--branch-prefix <prefix>` | Prefix for branch names (e.g., `nanasess/`) |
+| `--no-install` | Skip dependency installation |
 
-### List worktrees
-
-```bash
-worktree list
-```
-
-### Checkout branches
+### `worktree list`
 
 ```bash
-# Checkout default branch on all repositories
-worktree checkout
-
-# Checkout a specific branch
-worktree checkout develop
+worktree list    # or: worktree ls
 ```
 
-Alias: `worktree co`
+Shows all tasks with branch names, modification status, and untracked files.
 
-### Pull repositories
+### `worktree checkout [branch]`
+
+```bash
+worktree checkout           # default branch
+worktree checkout develop   # specific branch
+worktree co main            # alias
+```
+
+### `worktree pull`
 
 ```bash
 worktree pull
 ```
 
-Runs `git pull --ff-only` on each repository and shows a summary of results.
+Runs `git pull --ff-only` on each repo with a summary of results.
 
-### Cleanup worktrees
+### `worktree cleanup [task-name]`
 
 ```bash
-# Remove a specific task
 worktree cleanup feature-login --force --delete-branches
-
-# Auto-detect and remove merged tasks
 worktree cleanup --merged --force --delete-branches
-
-# Dry run (show targets without deleting)
 worktree cleanup --merged --dry-run
 ```
 
-#### Options
+Aliases: `worktree clean`, `worktree rm`
 
 | Option | Description |
 |---|---|
-| `--merged` | Auto-detect tasks merged into the default branch |
-| `--delete-branches` | Delete branches along with worktrees |
-| `--dry-run` | Show targets without actually deleting |
-| `--force` | Skip confirmation prompts |
+| `--merged` | Auto-detect merged tasks |
+| `--delete-branches` | Also delete branches |
+| `--dry-run` | Preview without deleting |
+| `--force` | Skip confirmation |
 
-### Install Claude Code skills
-
-```bash
-# Install to current project (.claude/skills/)
-worktree install --skills
-
-# Install globally (~/.claude/skills/)
-worktree install --skills --global
-```
-
-Installs slash command skills for Claude Code:
-- `/worktree-create <task-name>` - Create worktrees
-- `/worktree-list` - List worktrees
-- `/worktree-cleanup <task-name>` - Cleanup worktrees
-
-## Worktree Layout
-
-Worktrees are placed outside the project directory to avoid search noise:
-
-```
-~/git-repos/
-├── my-project/                            # Original project
-│   ├── CLAUDE.md
-│   ├── frontend/
-│   └── backend/
-├── my-project.worktrees/                  # Worktrees (outside repo)
-│   └── task-A/
-│       ├── CLAUDE.md → symlink to original CLAUDE.md
-│       ├── frontend/   (git worktree, branch: task-A)
-│       └── backend/    (git worktree, branch: task-A)
-```
-
-## .worktreerc Hook
-
-Place a `.worktreerc` file in the project root. The `post_create()` function runs inside the task directory after worktree creation.
+### `worktree install --skills`
 
 ```bash
-# .worktreerc example
+worktree install --skills            # project-local
+worktree install --skills --global   # all projects
+```
+
+Installs Claude Code slash commands: `/worktree-create`, `/worktree-list`, `/worktree-cleanup`, `/worktree-checkout`, `/worktree-pull`.
+
+## `.worktreerc` Hook
+
+Place in the project root. `post_create()` runs in the task directory after creation.
+
+```bash
 post_create() {
     ln -sf shared-docs/claude-repository-guide.md CLAUDE.md
     ln -sf shared-docs/setup.sh setup.sh
 }
 ```
 
-Environment variables available in hooks:
-
 | Variable | Description |
 |---|---|
 | `WORKTREE_TASK_NAME` | Task name |
-| `WORKTREE_TASK_DIR` | Full path to the task directory |
-| `WORKTREE_PROJECT_ROOT` | Full path to the original project root |
+| `WORKTREE_TASK_DIR` | Task directory path |
+| `WORKTREE_PROJECT_ROOT` | Original project root |
 
-## Automatic Dependency Installation
+## Auto Dependency Installation
 
-| Detected File | Command |
+Detected automatically during `worktree create`:
+
+| Lock File | Command |
 |---|---|
 | `package-lock.json` | `npm install` |
 | `pnpm-lock.yaml` | `pnpm install` |
 | `yarn.lock` | `yarn install` |
 | `composer.lock` | `composer install` |
-| `*.sln` or `*.csproj` | `dotnet restore` |
+| `*.sln` / `*.csproj` | `dotnet restore` |
 
-Use `--no-install` to skip.
+Skip with `--no-install`.
 
 ## Testing
 
-Tests use [bats-core](https://github.com/bats-core/bats-core) (included as git submodules).
+Uses [bats-core](https://github.com/bats-core/bats-core) (git submodules).
 
 ```bash
-# Initialize submodules (first time only)
 git submodule update --init --recursive
-
-# Run all tests
 ./test/bats/bin/bats test/*.bats
-
-# Run single-repo tests only
-./test/bats/bin/bats test/single_repo.bats
-
-# Run multi-repo tests only
-./test/bats/bin/bats test/multi_repo.bats
 ```
 
 ## License
