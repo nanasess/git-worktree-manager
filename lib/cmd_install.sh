@@ -100,6 +100,8 @@ cmd_install() {
         echo "  /worktree-create <task-name>   Create worktrees"
         echo "  /worktree-list                 List worktrees"
         echo "  /worktree-cleanup <task-name>  Cleanup worktrees"
+        echo "  /worktree-checkout [branch]    Checkout a branch on all repos"
+        echo "  /worktree-pull                 Pull all repos"
     else
         log_warn "No skills available to install"
     fi
