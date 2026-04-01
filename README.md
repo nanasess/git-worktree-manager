@@ -1,6 +1,7 @@
 # git-worktree-manager
 
 > Manage git worktrees across single or multiple repositories with a single command.
+> Pure Bash — no dependencies beyond `git` and `bash`.
 
 [![CI](https://github.com/nanasess/git-worktree-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/nanasess/git-worktree-manager/actions/workflows/ci.yml)
 
