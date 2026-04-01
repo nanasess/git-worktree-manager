@@ -58,12 +58,12 @@ cmd_list() {
         local repo_dir="${git_marker%/*}"
         local relative="${repo_dir#"$worktrees_base"/}"
 
-        # relative にスラッシュがあれば複数リポ（task_name/repo）、なければ単一リポ（task_name）
+        # 構成に応じてタスク名を抽出
         local task_name
-        if [[ "$relative" == */* ]]; then
-            task_name="${relative%/*}"
-        else
+        if is_single_repo; then
             task_name="$relative"
+        else
+            task_name="${relative%/*}"
         fi
 
         # 重複チェック

@@ -76,3 +76,28 @@ teardown_file() {
     assert_success
     assert_output --partial "worktree はありません"
 }
+
+# スラッシュ付きタスク名のテスト
+@test "create: スラッシュ付きタスク名で worktree が作成される" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" create feature/slash-test --no-install
+    assert_success
+
+    [ -d "${WORKTREES_DIR}/feature/slash-test" ]
+    [ -f "${WORKTREES_DIR}/feature/slash-test/.git" ]
+}
+
+@test "list: スラッシュ付きタスク名が正しく表示される" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" list
+    assert_success
+    assert_output --partial "feature/slash-test"
+}
+
+@test "cleanup: スラッシュ付きタスク名を削除できる" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup feature/slash-test --force --delete-branches
+    assert_success
+
+    [ ! -d "${WORKTREES_DIR}/feature/slash-test" ]
+}

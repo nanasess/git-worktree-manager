@@ -120,7 +120,12 @@ cmd_create() {
     # 各リポジトリで worktree を作成
     for repo in "${repos[@]}"; do
         local repo_path="${project_root}/${repo}"
-        local worktree_path="${task_dir}/${repo}"
+        local worktree_path
+        if [ "$repo" = "." ]; then
+            worktree_path="$task_dir"
+        else
+            worktree_path="${task_dir}/${repo}"
+        fi
         local branch_name="${branch_prefix}${task_name}"
         local display_name="$repo"
         [ "$repo" = "." ] && display_name="$project_name"
@@ -145,10 +150,8 @@ cmd_create() {
 
         # worktree add
         log_info "  worktree を作成中: ${branch_name}"
-        local display_worktree_path="$worktree_path"
-        [ "$repo" = "." ] && display_worktree_path="$task_dir"
         if git -C "$repo_path" worktree add -b "$branch_name" "$worktree_path" "origin/${default_branch}" 2>&1; then
-            log_success "  worktree を作成しました: ${display_worktree_path}"
+            log_success "  worktree を作成しました: ${worktree_path}"
             RESULTS["$display_name"]="OK: branch=${branch_name}"
             created_repos+=("$repo")
         else
@@ -156,7 +159,7 @@ cmd_create() {
             if git -C "$repo_path" rev-parse --verify "$branch_name" >/dev/null 2>&1; then
                 log_warn "  ブランチ ${branch_name} は既に存在します。既存ブランチを使用します。"
                 if git -C "$repo_path" worktree add "$worktree_path" "$branch_name" 2>&1; then
-                    log_success "  worktree を作成しました（既存ブランチ）: ${display_worktree_path}"
+                    log_success "  worktree を作成しました（既存ブランチ）: ${worktree_path}"
                     RESULTS["$display_name"]="OK: branch=${branch_name} (existing)"
                     created_repos+=("$repo")
                 else
