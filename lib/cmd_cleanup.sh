@@ -140,18 +140,16 @@ is_task_merged() {
     local task_dir="$1"
     local project_root="$2"
 
-    for repo_dir in "$task_dir"/*/; do
-        [ -d "$repo_dir" ] || continue
-        repo_dir="${repo_dir%/}"
+    local repo_dirs_str
+    repo_dirs_str="$(list_task_repo_dirs "$task_dir")"
+    [ -z "$repo_dirs_str" ] && return 0
 
-        # git リポジトリかどうか確認
-        if [ ! -d "$repo_dir/.git" ] && [ ! -f "$repo_dir/.git" ]; then
-            continue
-        fi
+    local repo_dirs
+    read -ra repo_dirs <<< "$repo_dirs_str"
 
-        local repo_name
-        repo_name="$(basename "$repo_dir")"
-        local main_repo="${project_root}/${repo_name}"
+    for repo_dir in "${repo_dirs[@]}"; do
+        local main_repo
+        main_repo="$(get_main_repo_path "$repo_dir" "$task_dir" "$project_root")"
 
         if [ ! -d "$main_repo" ]; then
             continue
@@ -190,16 +188,22 @@ cleanup_task() {
 
     # 未コミット変更の確認
     local has_changes=false
-    for repo_dir in "$task_dir"/*/; do
-        [ -d "$repo_dir" ] || continue
-        repo_dir="${repo_dir%/}"
-        if [ ! -d "$repo_dir/.git" ] && [ ! -f "$repo_dir/.git" ]; then
-            continue
-        fi
+    local repo_dirs_str
+    repo_dirs_str="$(list_task_repo_dirs "$task_dir")"
+    local repo_dirs_arr=()
+    if [ -n "$repo_dirs_str" ]; then
+        read -ra repo_dirs_arr <<< "$repo_dirs_str"
+    fi
+
+    for repo_dir in "${repo_dirs_arr[@]}"; do
         if ! git -C "$repo_dir" diff --quiet 2>/dev/null || ! git -C "$repo_dir" diff --cached --quiet 2>/dev/null; then
             has_changes=true
             local rn
-            rn="$(basename "$repo_dir")"
+            if [ "$repo_dir" = "$task_dir" ]; then
+                rn="$(get_project_name)"
+            else
+                rn="$(basename "$repo_dir")"
+            fi
             log_warn "  ${rn}: 未コミットの変更があります"
         fi
     done
@@ -224,18 +228,15 @@ cleanup_task() {
     local repo_names=()
 
     # 各リポジトリの worktree を削除
-    for repo_dir in "$task_dir"/*/; do
-        [ -d "$repo_dir" ] || continue
-        repo_dir="${repo_dir%/}"
-
-        # git リポジトリかどうか確認
-        if [ ! -d "$repo_dir/.git" ] && [ ! -f "$repo_dir/.git" ]; then
-            continue
-        fi
-
+    for repo_dir in "${repo_dirs_arr[@]}"; do
         local repo_name
-        repo_name="$(basename "$repo_dir")"
-        local main_repo="${project_root}/${repo_name}"
+        if [ "$repo_dir" = "$task_dir" ]; then
+            repo_name="$(get_project_name)"
+        else
+            repo_name="$(basename "$repo_dir")"
+        fi
+        local main_repo
+        main_repo="$(get_main_repo_path "$repo_dir" "$task_dir" "$project_root")"
         repo_names+=("$repo_name")
 
         local branch

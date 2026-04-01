@@ -95,11 +95,23 @@ cmd_create() {
         return 1
     fi
 
-    log_info "検出されたリポジトリ (${#repos[@]}): ${repos[*]}"
+    # 表示用リポジトリ名（"." の場合はプロジェクト名を使用）
+    local display_repos=()
+    for repo in "${repos[@]}"; do
+        if [ "$repo" = "." ]; then
+            display_repos+=("$project_name")
+        else
+            display_repos+=("$repo")
+        fi
+    done
+    log_info "検出されたリポジトリ (${#repos[@]}): ${display_repos[*]}"
     echo ""
 
     # タスクディレクトリを作成
-    mkdir -p "$task_dir"
+    # 単一リポジトリの場合は git worktree add が直接作成するのでスキップ
+    if ! is_single_repo; then
+        mkdir -p "$task_dir"
+    fi
 
     # 結果格納
     declare -A RESULTS
@@ -108,11 +120,18 @@ cmd_create() {
     # 各リポジトリで worktree を作成
     for repo in "${repos[@]}"; do
         local repo_path="${project_root}/${repo}"
-        local worktree_path="${task_dir}/${repo}"
+        local worktree_path
+        if [ "$repo" = "." ]; then
+            worktree_path="$task_dir"
+        else
+            worktree_path="${task_dir}/${repo}"
+        fi
         local branch_name="${branch_prefix}${task_name}"
+        local display_name="$repo"
+        [ "$repo" = "." ] && display_name="$project_name"
 
         echo "------------------------------------------"
-        log_info "処理中: ${repo}"
+        log_info "処理中: ${display_name}"
 
         # fetch
         log_info "  git fetch origin..."
@@ -124,7 +143,7 @@ cmd_create() {
         local default_branch
         default_branch="$(detect_default_branch "$repo_path")" || {
             log_error "  デフォルトブランチを検出できません"
-            RESULTS["$repo"]="FAIL: デフォルトブランチ検出失敗"
+            RESULTS["$display_name"]="FAIL: デフォルトブランチ検出失敗"
             continue
         }
         log_info "  ベースブランチ: origin/${default_branch}"
@@ -133,7 +152,7 @@ cmd_create() {
         log_info "  worktree を作成中: ${branch_name}"
         if git -C "$repo_path" worktree add -b "$branch_name" "$worktree_path" "origin/${default_branch}" 2>&1; then
             log_success "  worktree を作成しました: ${worktree_path}"
-            RESULTS["$repo"]="OK: branch=${branch_name}"
+            RESULTS["$display_name"]="OK: branch=${branch_name}"
             created_repos+=("$repo")
         else
             # ブランチが既に存在する場合は、既存ブランチで worktree を作成
@@ -141,15 +160,15 @@ cmd_create() {
                 log_warn "  ブランチ ${branch_name} は既に存在します。既存ブランチを使用します。"
                 if git -C "$repo_path" worktree add "$worktree_path" "$branch_name" 2>&1; then
                     log_success "  worktree を作成しました（既存ブランチ）: ${worktree_path}"
-                    RESULTS["$repo"]="OK: branch=${branch_name} (existing)"
+                    RESULTS["$display_name"]="OK: branch=${branch_name} (existing)"
                     created_repos+=("$repo")
                 else
                     log_error "  worktree の作成に失敗しました"
-                    RESULTS["$repo"]="FAIL: worktree 作成失敗"
+                    RESULTS["$display_name"]="FAIL: worktree 作成失敗"
                 fi
             else
                 log_error "  worktree の作成に失敗しました"
-                RESULTS["$repo"]="FAIL: worktree 作成失敗"
+                RESULTS["$display_name"]="FAIL: worktree 作成失敗"
             fi
         fi
     done
@@ -176,6 +195,16 @@ cmd_create() {
                 fi
             fi
         done
+    fi
+
+    # 単一リポジトリの場合: CLAUDE.md に worktree コンテキストを付加
+    if is_single_repo; then
+        local claude_md_src="${project_root}/CLAUDE.md"
+        if [ -f "$claude_md_src" ]; then
+            local claude_md_dst="${task_dir}/CLAUDE.md"
+            generate_worktree_claude_md "$claude_md_src" "$claude_md_dst" "$task_name" "$task_dir" "$project_root"
+            log_info "  CLAUDE.md → 生成（worktree コンテキスト付き）"
+        fi
     fi
 
     # .worktreerc フックを実行
@@ -216,7 +245,7 @@ cmd_create() {
     fi
 
     # 結果サマリ
-    print_summary RESULTS "${repos[@]}"
+    print_summary RESULTS "${display_repos[@]}"
 
     log_success "タスクディレクトリ: ${task_dir}"
     echo ""
