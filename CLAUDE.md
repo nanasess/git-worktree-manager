@@ -19,11 +19,18 @@ worktree create <task-name> [--branch-prefix <prefix>] [--no-install]
 worktree list
 worktree cleanup <task-name> [--force] [--delete-branches]
 worktree cleanup --merged [--force] [--delete-branches] [--dry-run]
+worktree checkout [branch]
+worktree pull
+worktree install --skills [--global]
 ```
+
+すべてのコマンドはプロジェクトルートまたは `.worktrees/` ディレクトリ内から実行可能。
 
 ## worktree 配置構造
 
 worktree はプロジェクトの隣に `<project>.worktrees/` として配置されます（リポジトリ内にはノイズが入らない）。
+
+create 時に CLAUDE.md へ Worktree Context（タスク名、作業ディレクトリ、プロジェクトルート）を付加して生成する。
 
 ## .worktreerc フック
 

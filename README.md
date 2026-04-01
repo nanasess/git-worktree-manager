@@ -17,6 +17,8 @@ ln -sf ~/git-repos/git-worktree-manager/worktree ~/.local/bin/worktree
 
 ## Usage
 
+All commands can be run from the project root or from inside a `.worktrees/` directory.
+
 ### Create worktrees
 
 ```bash
@@ -27,9 +29,10 @@ worktree create feature-login
 For every git repository under the project root:
 1. Runs `git fetch origin` to update
 2. Creates a worktree based on origin/HEAD (default branch)
-3. Symlinks non-git items (CLAUDE.md, etc.) into the task directory
-4. Executes `post_create()` hook from `.worktreerc` if present
-5. Auto-installs dependencies based on lock files
+3. Generates a CLAUDE.md with worktree context (task name, working directory, project root)
+4. Symlinks non-git items into the task directory
+5. Executes `post_create()` hook from `.worktreerc` if present
+6. Auto-installs dependencies based on lock files
 
 #### Options
 
@@ -43,6 +46,26 @@ For every git repository under the project root:
 ```bash
 worktree list
 ```
+
+### Checkout branches
+
+```bash
+# Checkout default branch on all repositories
+worktree checkout
+
+# Checkout a specific branch
+worktree checkout develop
+```
+
+Alias: `worktree co`
+
+### Pull repositories
+
+```bash
+worktree pull
+```
+
+Runs `git pull --ff-only` on each repository and shows a summary of results.
 
 ### Cleanup worktrees
 
@@ -65,6 +88,21 @@ worktree cleanup --merged --dry-run
 | `--delete-branches` | Delete branches along with worktrees |
 | `--dry-run` | Show targets without actually deleting |
 | `--force` | Skip confirmation prompts |
+
+### Install Claude Code skills
+
+```bash
+# Install to current project (.claude/skills/)
+worktree install --skills
+
+# Install globally (~/.claude/skills/)
+worktree install --skills --global
+```
+
+Installs slash command skills for Claude Code:
+- `/worktree-create <task-name>` - Create worktrees
+- `/worktree-list` - List worktrees
+- `/worktree-cleanup <task-name>` - Cleanup worktrees
 
 ## Worktree Layout
 

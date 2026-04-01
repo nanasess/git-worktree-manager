@@ -92,8 +92,7 @@ generate_worktree_claude_md() {
 
 ## 動作確認
 
-このワークツリーには Docker Compose 環境がありません。
-動作確認が必要な場合は、プロジェクトルート (\`${project_root}\`) で該当ブランチをチェックアウトして行ってください。
+動作確認はこのディレクトリ (\`${task_dir}\`) 内で \`docker compose up\` 等を実行してください。
 
 ---
 
