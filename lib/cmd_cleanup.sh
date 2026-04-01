@@ -1,20 +1,20 @@
 #!/bin/bash
 #
-# cmd_cleanup.sh - cleanup サブコマンド
+# cmd_cleanup.sh - cleanup subcommand
 #
 
 cmd_cleanup_usage() {
-    echo -e "${BOLD}worktree cleanup${NC} - worktree を一括削除"
+    echo -e "${BOLD}worktree cleanup${NC} - Remove worktrees"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
     echo "    worktree cleanup [task-name] [OPTIONS]"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
-    echo "    --merged              マージ済みタスクを自動検出して削除"
-    echo "    --delete-branches     worktree と共にブランチも削除"
-    echo "    --dry-run             実際の削除は行わず対象を表示"
-    echo "    --force               確認プロンプトなしで削除"
-    echo "    -h, --help            ヘルプを表示"
+    echo "    --merged              Auto-detect and remove merged tasks"
+    echo "    --delete-branches     Delete branches along with worktrees"
+    echo "    --dry-run             Show targets without actually deleting"
+    echo "    --force               Skip confirmation prompts"
+    echo "    -h, --help            Show help"
     echo ""
     echo -e "${BOLD}ALIASES:${NC}"
     echo "    worktree clean, worktree rm"
@@ -32,7 +32,7 @@ cmd_cleanup() {
     local dry_run=false
     local force=false
 
-    # オプション解析
+    # Parse options
     while [ $# -gt 0 ]; do
         case "$1" in
             --merged)
@@ -52,7 +52,7 @@ cmd_cleanup() {
                 return 0
                 ;;
             -*)
-                log_error "不明なオプション: $1"
+                log_error "Unknown option: $1"
                 cmd_cleanup_usage
                 return 1
                 ;;
@@ -60,7 +60,7 @@ cmd_cleanup() {
                 if [ -z "$task_name" ]; then
                     task_name="$1"
                 else
-                    log_error "タスク名が複数指定されています"
+                    log_error "Multiple task names specified"
                     return 1
                 fi
                 ;;
@@ -76,23 +76,22 @@ cmd_cleanup() {
     worktrees_base="$(get_worktrees_base)"
 
     if [ ! -d "$worktrees_base" ]; then
-        log_info "worktree はありません"
+        log_info "No worktrees found"
         return 0
     fi
 
-    # 削除対象のタスクを決定
+    # Determine tasks to clean
     local tasks_to_clean=()
 
     if [ -n "$task_name" ]; then
-        # タスク名が指定された場合
         local task_dir="${worktrees_base}/${task_name}"
         if [ ! -d "$task_dir" ]; then
-            log_error "タスクが見つかりません: ${task_name}"
+            log_error "Task not found: ${task_name}"
             return 1
         fi
         tasks_to_clean+=("$task_name")
     elif [ "$merged_only" = true ]; then
-        # マージ済みタスクを自動検出
+        # Auto-detect merged tasks
         for task_dir in "$worktrees_base"/*/; do
             [ -d "$task_dir" ] || continue
             task_dir="${task_dir%/}"
@@ -105,11 +104,11 @@ cmd_cleanup() {
         done
 
         if [ ${#tasks_to_clean[@]} -eq 0 ]; then
-            log_info "マージ済みのタスクはありません"
+            log_info "No merged tasks found"
             return 0
         fi
     else
-        log_error "タスク名または --merged を指定してください"
+        log_error "Specify a task name or --merged"
         cmd_cleanup_usage
         return 1
     fi
@@ -121,21 +120,20 @@ cmd_cleanup() {
     echo ""
 
     if [ "$dry_run" = true ]; then
-        log_warn "ドライランモード: 実際の削除は行いません"
+        log_warn "Dry run mode: no actual deletions"
         echo ""
     fi
 
-    log_info "削除対象タスク (${#tasks_to_clean[@]}): ${tasks_to_clean[*]}"
+    log_info "Tasks to clean (${#tasks_to_clean[@]}): ${tasks_to_clean[*]}"
     echo ""
 
-    # 各タスクを処理
+    # Process each task
     for tn in "${tasks_to_clean[@]}"; do
         cleanup_task "$tn" "$project_root" "$worktrees_base" "$delete_branches" "$dry_run" "$force"
     done
 }
 
-# タスクがマージ済みかどうかを判定
-# タスク内の全リポジトリのブランチがデフォルトブランチにマージされていれば true
+# Check if all branches in a task are merged into the default branch
 is_task_merged() {
     local task_dir="$1"
     local project_root="$2"
@@ -164,7 +162,7 @@ is_task_merged() {
         local default_branch
         default_branch="$(detect_default_branch "$main_repo" 2>/dev/null)" || continue
 
-        # ブランチがデフォルトブランチにマージされているか確認
+        # Check if branch is merged into default branch
         if ! git -C "$main_repo" branch --merged "origin/${default_branch}" 2>/dev/null | grep -qw "$branch"; then
             return 1
         fi
@@ -173,7 +171,7 @@ is_task_merged() {
     return 0
 }
 
-# 個別タスクの削除処理
+# Clean up a single task
 cleanup_task() {
     local task_name="$1"
     local project_root="$2"
@@ -184,9 +182,9 @@ cleanup_task() {
     local task_dir="${worktrees_base}/${task_name}"
 
     echo "------------------------------------------"
-    log_info "タスク: ${task_name}"
+    log_info "Task: ${task_name}"
 
-    # 未コミット変更の確認
+    # Check for uncommitted changes
     local has_changes=false
     local repo_dirs_str
     repo_dirs_str="$(list_task_repo_dirs "$task_dir")"
@@ -204,30 +202,30 @@ cleanup_task() {
             else
                 rn="$(basename "$repo_dir")"
             fi
-            log_warn "  ${rn}: 未コミットの変更があります"
+            log_warn "  ${rn}: has uncommitted changes"
         fi
     done
 
     if [ "$has_changes" = true ] && [ "$force" = false ]; then
-        log_warn "未コミット変更があります。--force で強制削除できます。"
+        log_warn "Uncommitted changes found. Use --force to force delete."
         return 1
     fi
 
-    # 確認プロンプト
+    # Confirmation prompt
     if [ "$force" = false ] && [ "$dry_run" = false ]; then
         echo ""
-        read -rp "タスク '${task_name}' を削除しますか？ [y/N] " answer
+        read -rp "Delete task '${task_name}'? [y/N] " answer
         if [[ ! "$answer" =~ ^[yY]$ ]]; then
-            log_info "スキップしました"
+            log_info "Skipped"
             return 0
         fi
     fi
 
-    # 結果格納
+    # Store results
     declare -A RESULTS
     local repo_names=()
 
-    # 各リポジトリの worktree を削除
+    # Remove worktrees
     for repo_dir in "${repo_dirs_arr[@]}"; do
         local repo_name
         if [ "$repo_dir" = "$task_dir" ]; then
@@ -243,50 +241,50 @@ cleanup_task() {
         branch="$(git -C "$repo_dir" branch --show-current 2>/dev/null)"
 
         if [ "$dry_run" = true ]; then
-            log_info "  [DRY RUN] worktree 削除: ${repo_name} (branch: ${branch})"
+            log_info "  [DRY RUN] Remove worktree: ${repo_name} (branch: ${branch})"
             if [ "$delete_branches" = true ]; then
-                log_info "  [DRY RUN] ブランチ削除: ${branch}"
+                log_info "  [DRY RUN] Delete branch: ${branch}"
             fi
             RESULTS["$repo_name"]="OK: dry-run"
             continue
         fi
 
-        # worktree を削除
+        # Remove worktree
         if [ -d "$main_repo" ]; then
             if git -C "$main_repo" worktree remove "$repo_dir" --force 2>&1; then
-                log_success "  worktree を削除しました: ${repo_name}"
+                log_success "  Removed worktree: ${repo_name}"
                 RESULTS["$repo_name"]="OK: worktree removed"
             else
-                log_error "  worktree の削除に失敗しました: ${repo_name}"
-                RESULTS["$repo_name"]="FAIL: worktree 削除失敗"
+                log_error "  Failed to remove worktree: ${repo_name}"
+                RESULTS["$repo_name"]="FAIL: worktree removal failed"
                 continue
             fi
 
-            # ブランチを削除
+            # Delete branch
             if [ "$delete_branches" = true ] && [ -n "$branch" ]; then
                 if git -C "$main_repo" branch -D "$branch" 2>&1; then
-                    log_success "  ブランチを削除しました: ${branch}"
+                    log_success "  Deleted branch: ${branch}"
                     RESULTS["$repo_name"]="OK: worktree + branch removed"
                 else
-                    log_warn "  ブランチの削除に失敗しました: ${branch}"
-                    RESULTS["$repo_name"]="OK: worktree removed (branch 削除失敗)"
+                    log_warn "  Failed to delete branch: ${branch}"
+                    RESULTS["$repo_name"]="OK: worktree removed (branch deletion failed)"
                 fi
             fi
         fi
     done
 
-    # タスクディレクトリを削除
+    # Remove task directory
     if [ "$dry_run" = false ]; then
         rm -rf "$task_dir"
-        log_success "タスクディレクトリを削除しました: ${task_dir}"
+        log_success "Removed task directory: ${task_dir}"
 
-        # ベースディレクトリが空なら削除
+        # Remove empty worktrees base directory
         if [ -d "$worktrees_base" ] && [ -z "$(ls -A "$worktrees_base")" ]; then
             rmdir "$worktrees_base"
-            log_info "空の worktrees ディレクトリを削除しました: ${worktrees_base}"
+            log_info "Removed empty worktrees directory: ${worktrees_base}"
         fi
     else
-        log_info "[DRY RUN] タスクディレクトリ削除: ${task_dir}"
+        log_info "[DRY RUN] Remove task directory: ${task_dir}"
     fi
 
     if [ ${#repo_names[@]} -gt 0 ]; then

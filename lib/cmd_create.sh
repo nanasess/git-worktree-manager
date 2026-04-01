@@ -1,18 +1,18 @@
 #!/bin/bash
 #
-# cmd_create.sh - create サブコマンド
+# cmd_create.sh - create subcommand
 #
 
 cmd_create_usage() {
-    echo -e "${BOLD}worktree create${NC} - タスク用の worktree を一括作成"
+    echo -e "${BOLD}worktree create${NC} - Create worktrees for a task"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
     echo "    worktree create <task-name> [OPTIONS]"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
-    echo "    --branch-prefix <prefix>  ブランチ名にプレフィックスを付与"
-    echo "    --no-install              依存関係の自動インストールをスキップ"
-    echo "    -h, --help                ヘルプを表示"
+    echo "    --branch-prefix <prefix>  Add a prefix to branch names"
+    echo "    --no-install              Skip automatic dependency installation"
+    echo "    -h, --help                Show help"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
     echo "    worktree create feature-login"
@@ -25,7 +25,7 @@ cmd_create() {
     local branch_prefix=""
     local no_install=false
 
-    # オプション解析
+    # Parse options
     while [ $# -gt 0 ]; do
         case "$1" in
             --branch-prefix)
@@ -40,7 +40,7 @@ cmd_create() {
                 return 0
                 ;;
             -*)
-                log_error "不明なオプション: $1"
+                log_error "Unknown option: $1"
                 cmd_create_usage
                 return 1
                 ;;
@@ -48,7 +48,7 @@ cmd_create() {
                 if [ -z "$task_name" ]; then
                     task_name="$1"
                 else
-                    log_error "タスク名が複数指定されています"
+                    log_error "Multiple task names specified"
                     return 1
                 fi
                 ;;
@@ -57,7 +57,7 @@ cmd_create() {
     done
 
     if [ -z "$task_name" ]; then
-        log_error "タスク名を指定してください"
+        log_error "Task name is required"
         cmd_create_usage
         return 1
     fi
@@ -76,26 +76,26 @@ cmd_create() {
     echo -e " ${BOLD}worktree create${NC}: ${task_name}"
     echo "============================================"
     echo ""
-    log_info "プロジェクト: ${project_name} (${project_root})"
-    log_info "タスクディレクトリ: ${task_dir}"
+    log_info "Project: ${project_name} (${project_root})"
+    log_info "Task directory: ${task_dir}"
 
-    # タスクディレクトリが既に存在する場合はエラー
+    # Error if task directory already exists
     if [ -d "$task_dir" ]; then
-        log_error "タスクディレクトリが既に存在します: ${task_dir}"
+        log_error "Task directory already exists: ${task_dir}"
         return 1
     fi
 
-    # git リポジトリを列挙
+    # List git repositories
     local repos_str
     repos_str="$(list_git_repos)"
     read -ra repos <<< "$repos_str"
 
     if [ ${#repos[@]} -eq 0 ]; then
-        log_error "git リポジトリが見つかりません: ${project_root}"
+        log_error "No git repositories found: ${project_root}"
         return 1
     fi
 
-    # 表示用リポジトリ名（"." の場合はプロジェクト名を使用）
+    # Display names ("." replaced with project name)
     local display_repos=()
     for repo in "${repos[@]}"; do
         if [ "$repo" = "." ]; then
@@ -104,20 +104,19 @@ cmd_create() {
             display_repos+=("$repo")
         fi
     done
-    log_info "検出されたリポジトリ (${#repos[@]}): ${display_repos[*]}"
+    log_info "Repositories (${#repos[@]}): ${display_repos[*]}"
     echo ""
 
-    # タスクディレクトリを作成
-    # 単一リポジトリの場合は git worktree add が直接作成するのでスキップ
+    # Create task directory (skip for single repo — git worktree add creates it)
     if ! is_single_repo; then
         mkdir -p "$task_dir"
     fi
 
-    # 結果格納
+    # Store results
     declare -A RESULTS
     local created_repos=()
 
-    # 各リポジトリで worktree を作成
+    # Create worktree for each repository
     for repo in "${repos[@]}"; do
         local repo_path="${project_root}/${repo}"
         local worktree_path
@@ -131,52 +130,52 @@ cmd_create() {
         [ "$repo" = "." ] && display_name="$project_name"
 
         echo "------------------------------------------"
-        log_info "処理中: ${display_name}"
+        log_info "Processing: ${display_name}"
 
-        # fetch
+        # Fetch
         log_info "  git fetch origin..."
         if ! git -C "$repo_path" fetch origin 2>&1 | head -5; then
-            log_warn "  fetch に失敗しました（続行します）"
+            log_warn "  Fetch failed (continuing)"
         fi
 
-        # デフォルトブランチを検出
+        # Detect default branch
         local default_branch
         default_branch="$(detect_default_branch "$repo_path")" || {
-            log_error "  デフォルトブランチを検出できません"
-            RESULTS["$display_name"]="FAIL: デフォルトブランチ検出失敗"
+            log_error "  Cannot detect default branch"
+            RESULTS["$display_name"]="FAIL: default branch detection failed"
             continue
         }
-        log_info "  ベースブランチ: origin/${default_branch}"
+        log_info "  Base branch: origin/${default_branch}"
 
-        # worktree add
-        log_info "  worktree を作成中: ${branch_name}"
+        # Create worktree
+        log_info "  Creating worktree: ${branch_name}"
         if git -C "$repo_path" worktree add -b "$branch_name" "$worktree_path" "origin/${default_branch}" 2>&1; then
-            log_success "  worktree を作成しました: ${worktree_path}"
+            log_success "  Created worktree: ${worktree_path}"
             RESULTS["$display_name"]="OK: branch=${branch_name}"
             created_repos+=("$repo")
         else
-            # ブランチが既に存在する場合は、既存ブランチで worktree を作成
+            # If branch already exists, use existing branch
             if git -C "$repo_path" rev-parse --verify "$branch_name" >/dev/null 2>&1; then
-                log_warn "  ブランチ ${branch_name} は既に存在します。既存ブランチを使用します。"
+                log_warn "  Branch ${branch_name} already exists. Using existing branch."
                 if git -C "$repo_path" worktree add "$worktree_path" "$branch_name" 2>&1; then
-                    log_success "  worktree を作成しました（既存ブランチ）: ${worktree_path}"
+                    log_success "  Created worktree (existing branch): ${worktree_path}"
                     RESULTS["$display_name"]="OK: branch=${branch_name} (existing)"
                     created_repos+=("$repo")
                 else
-                    log_error "  worktree の作成に失敗しました"
-                    RESULTS["$display_name"]="FAIL: worktree 作成失敗"
+                    log_error "  Failed to create worktree"
+                    RESULTS["$display_name"]="FAIL: worktree creation failed"
                 fi
             else
-                log_error "  worktree の作成に失敗しました"
-                RESULTS["$display_name"]="FAIL: worktree 作成失敗"
+                log_error "  Failed to create worktree"
+                RESULTS["$display_name"]="FAIL: worktree creation failed"
             fi
         fi
     done
 
     echo ""
 
-    # 非 git アイテムをシンボリックリンクで配置
-    log_info "シンボリックリンクを作成中..."
+    # Create symlinks for non-git items
+    log_info "Creating symlinks..."
     local items_str
     items_str="$(list_non_git_items)"
     if [ -n "$items_str" ]; then
@@ -186,50 +185,50 @@ cmd_create() {
             local dst="${task_dir}/${item}"
             if [ ! -e "$dst" ]; then
                 if [ "$item" = "CLAUDE.md" ]; then
-                    # CLAUDE.md はワークツリーコンテキストを付加した実ファイルを生成
+                    # Generate CLAUDE.md with worktree context
                     generate_worktree_claude_md "$src" "$dst" "$task_name" "$task_dir" "$project_root"
-                    log_info "  ${item} → 生成（worktree コンテキスト付き）"
+                    log_info "  ${item} -> generated (with worktree context)"
                 else
                     ln -sf "$src" "$dst"
-                    log_info "  ${item} → ${src}"
+                    log_info "  ${item} -> ${src}"
                 fi
             fi
         done
     fi
 
-    # 単一リポジトリの場合: CLAUDE.md に worktree コンテキストを付加
+    # Single repo: add worktree context to CLAUDE.md
     if is_single_repo; then
         local claude_md_src="${project_root}/CLAUDE.md"
         if [ -f "$claude_md_src" ]; then
             local claude_md_dst="${task_dir}/CLAUDE.md"
             generate_worktree_claude_md "$claude_md_src" "$claude_md_dst" "$task_name" "$task_dir" "$project_root"
-            log_info "  CLAUDE.md → 生成（worktree コンテキスト付き）"
+            log_info "  CLAUDE.md -> generated (with worktree context)"
         fi
     fi
 
-    # .worktreerc フックを実行
+    # Execute .worktreerc hook
     local worktreerc="${project_root}/.worktreerc"
     if [ -f "$worktreerc" ]; then
         echo ""
-        log_info ".worktreerc のフックを実行中..."
+        log_info "Executing .worktreerc hook..."
         (
             export WORKTREE_TASK_NAME="$task_name"
             export WORKTREE_TASK_DIR="$task_dir"
             export WORKTREE_PROJECT_ROOT="$project_root"
             cd "$task_dir"
-            # post_create 関数を読み込んで実行
+            # Load and execute post_create function
             source "$worktreerc"
             if type post_create &>/dev/null; then
                 post_create
-                log_success "post_create フックを実行しました"
+                log_success "post_create hook executed"
             fi
         )
     fi
 
-    # 依存関係のインストール
+    # Install dependencies
     if [ "$no_install" = false ] && [ ${#created_repos[@]} -gt 0 ]; then
         echo ""
-        log_info "依存関係をインストール中..."
+        log_info "Installing dependencies..."
         for repo in "${created_repos[@]}"; do
             local worktree_path="${task_dir}/${repo}"
             local deps_type
@@ -241,12 +240,12 @@ cmd_create() {
         done
     elif [ "$no_install" = true ]; then
         echo ""
-        log_info "依存関係のインストールをスキップしました (--no-install)"
+        log_info "Skipped dependency installation (--no-install)"
     fi
 
-    # 結果サマリ
+    # Result summary
     print_summary RESULTS "${display_repos[@]}"
 
-    log_success "タスクディレクトリ: ${task_dir}"
+    log_success "Task directory: ${task_dir}"
     echo ""
 }

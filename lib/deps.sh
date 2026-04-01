@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# deps.sh - 依存関係検出・インストール
+# deps.sh - Dependency detection and installation
 #
 
-# lock ファイルに基づいて依存関係をインストール
+# Install dependencies based on lock files
 # Usage: install_deps <directory>
 install_deps() {
     local dir="$1"
@@ -15,39 +15,39 @@ install_deps() {
     local installed=false
 
     if [ -f "$dir/package-lock.json" ]; then
-        log_info "  npm install を実行中..."
+        log_info "  Running npm install..."
         if (cd "$dir" && npm install --no-audit --no-fund 2>&1 | tail -1); then
             installed=true
         else
-            log_warn "  npm install が失敗しました"
+            log_warn "  npm install failed"
         fi
     elif [ -f "$dir/pnpm-lock.yaml" ]; then
-        log_info "  pnpm install を実行中..."
+        log_info "  Running pnpm install..."
         if (cd "$dir" && pnpm install --frozen-lockfile 2>&1 | tail -1); then
             installed=true
         else
-            log_warn "  pnpm install が失敗しました"
+            log_warn "  pnpm install failed"
         fi
     elif [ -f "$dir/yarn.lock" ]; then
-        log_info "  yarn install を実行中..."
+        log_info "  Running yarn install..."
         if (cd "$dir" && yarn install --frozen-lockfile 2>&1 | tail -1); then
             installed=true
         else
-            log_warn "  yarn install が失敗しました"
+            log_warn "  yarn install failed"
         fi
     elif [ -f "$dir/composer.lock" ]; then
-        log_info "  composer install を実行中..."
+        log_info "  Running composer install..."
         if (cd "$dir" && composer install --no-interaction 2>&1 | tail -1); then
             installed=true
         else
-            log_warn "  composer install が失敗しました"
+            log_warn "  composer install failed"
         fi
     elif compgen -G "$dir/*.sln" >/dev/null 2>&1 || compgen -G "$dir/*.csproj" >/dev/null 2>&1; then
-        log_info "  dotnet restore を実行中..."
+        log_info "  Running dotnet restore..."
         if (cd "$dir" && dotnet restore 2>&1 | tail -1); then
             installed=true
         else
-            log_warn "  dotnet restore が失敗しました"
+            log_warn "  dotnet restore failed"
         fi
     fi
 
@@ -57,7 +57,7 @@ install_deps() {
     return 1
 }
 
-# ディレクトリ内の依存関係ファイルの種類を検出
+# Detect dependency type from lock files in a directory
 detect_deps_type() {
     local dir="$1"
 

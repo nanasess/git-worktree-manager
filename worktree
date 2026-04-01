@@ -1,16 +1,16 @@
 #!/bin/bash
 #
-# worktree - git worktree 一括管理ツール
+# worktree - Bulk git worktree management tool
 #
-# プロジェクトルート配下の複数 git リポジトリに対して
-# worktree の作成・一覧・削除を一括で行う。
+# Manages worktree creation, listing, and deletion
+# across multiple git repositories under a project root.
 #
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 
-# ライブラリ読み込み
+# Load libraries
 source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/detect.sh"
 source "$SCRIPT_DIR/lib/deps.sh"
@@ -24,27 +24,27 @@ source "$SCRIPT_DIR/lib/cmd_checkout.sh"
 VERSION="0.1.0"
 
 usage() {
-    echo -e "${BOLD}worktree${NC} v${VERSION} - git worktree 一括管理ツール"
+    echo -e "${BOLD}worktree${NC} v${VERSION} - Bulk git worktree management tool"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
     echo "    worktree <COMMAND> [OPTIONS]"
     echo ""
     echo -e "${BOLD}COMMANDS:${NC}"
-    echo "    create <task-name>    タスク用の worktree を一括作成"
-    echo "    list                  現在の worktree 一覧を表示"
-    echo "    cleanup [task-name]   worktree を一括削除"
-    echo "    checkout [branch]     配下の git リポジトリを一括でチェックアウト"
-    echo "    pull                  配下の git リポジトリを一括で pull"
-    echo "    install --skills      Claude Code skills をプロジェクトにインストール"
+    echo "    create <task-name>    Create worktrees for a task"
+    echo "    list                  List current worktrees"
+    echo "    cleanup [task-name]   Remove worktrees"
+    echo "    checkout [branch]     Checkout a branch on all repositories"
+    echo "    pull                  Pull all repositories"
+    echo "    install --skills      Install Claude Code skills"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
-    echo "    -h, --help            ヘルプを表示"
-    echo "    -v, --version         バージョンを表示"
+    echo "    -h, --help            Show help"
+    echo "    -v, --version         Show version"
     echo ""
-    echo "各コマンドのヘルプ: worktree <COMMAND> --help"
+    echo "Per-command help: worktree <COMMAND> --help"
 }
 
-# メイン処理
+# Main
 main() {
     if [ $# -eq 0 ]; then
         usage
@@ -82,7 +82,7 @@ main() {
             exit 0
             ;;
         *)
-            log_error "不明なコマンド: $command"
+            log_error "Unknown command: $command"
             echo ""
             usage
             exit 1

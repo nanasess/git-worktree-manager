@@ -1,29 +1,29 @@
 #!/bin/bash
 #
-# detect.sh - プロジェクト検出・リポジトリ列挙
+# detect.sh - Project detection and repository enumeration
 #
 
-# プロジェクトルート自体が git リポジトリかどうかを判定
+# Check if the project root itself is a git repository
 is_single_repo() {
     local project_root
     project_root="$(get_project_root)"
     [ -d "$project_root/.git" ] || [ -f "$project_root/.git" ]
 }
 
-# プロジェクトルート配下の git リポジトリを列挙
-# 単一リポジトリの場合は "." を返す
-# 複数リポジトリの場合は直下のサブディレクトリ名を返す
+# List git repositories under the project root.
+# Single repo: returns "."
+# Multi repo: returns subdirectory names
 list_git_repos() {
     local project_root
     project_root="$(get_project_root)"
 
-    # 単一リポジトリ: project_root 自体が .git を持つ
+    # Single repo: project_root itself has .git
     if is_single_repo; then
         echo "."
         return
     fi
 
-    # 複数リポジトリ: 直下のサブディレクトリを走査
+    # Multi repo: scan immediate subdirectories
     local repos=()
     for dir in "$project_root"/*/; do
         [ -d "$dir" ] || continue
@@ -36,9 +36,9 @@ list_git_repos() {
     echo "${repos[@]}"
 }
 
-# タスクディレクトリ内の worktree リポジトリディレクトリを列挙
-# 複数リポ: task_dir/repo1, task_dir/repo2, ...
-# 単一リポ: task_dir 自体
+# List worktree repository directories within a task directory.
+# Multi repo: task_dir/repo1, task_dir/repo2, ...
+# Single repo: task_dir itself
 list_task_repo_dirs() {
     local task_dir="$1"
     local dirs=()
@@ -51,7 +51,7 @@ list_task_repo_dirs() {
         fi
     done
 
-    # 単一リポジトリ: task_dir 自体が worktree
+    # Single repo: task_dir itself is the worktree
     if [ ${#dirs[@]} -eq 0 ]; then
         if [ -f "$task_dir/.git" ] || [ -d "$task_dir/.git" ]; then
             dirs+=("$task_dir")
@@ -61,14 +61,14 @@ list_task_repo_dirs() {
     echo "${dirs[@]}"
 }
 
-# worktree の repo_dir から元リポジトリのパスを算出
+# Get the main (bare) repository path for a given worktree repo directory
 get_main_repo_path() {
     local repo_dir="$1"
     local task_dir="$2"
     local project_root="$3"
 
     if [ "$repo_dir" = "$task_dir" ]; then
-        # 単一リポジトリ: 元リポは project_root 自体
+        # Single repo: main repo is project_root itself
         echo "$project_root"
     else
         local repo_name
@@ -77,11 +77,10 @@ get_main_repo_path() {
     fi
 }
 
-# プロジェクトルート直下の非 git アイテム（シンボリックリンク対象）を列挙
-# .git ディレクトリを持たないファイル・ディレクトリ
-# 単一リポジトリの場合は空を返す（worktree に全ファイルが含まれるため）
+# List non-git items under project root (for symlinking).
+# Returns empty for single repo (worktree contains all files).
 list_non_git_items() {
-    # 単一リポジトリ: worktree が全ファイルを含むのでシンボリックリンク不要
+    # Single repo: worktree contains all files, no symlinks needed
     if is_single_repo; then
         echo ""
         return
@@ -96,7 +95,7 @@ list_non_git_items() {
         local name
         name="$(basename "$item")"
 
-        # ディレクトリの場合、.git を持つものはスキップ（git リポジトリ）
+        # Skip directories that are git repositories
         if [ -d "$item" ]; then
             if [ -d "$item/.git" ] || [ -f "$item/.git" ]; then
                 continue
@@ -106,16 +105,16 @@ list_non_git_items() {
         items+=("$name")
     done
 
-    # dotfile も対象にする
+    # Include dotfiles
     for item in "$project_root"/.*; do
         [ -e "$item" ] || continue
         local name
         name="$(basename "$item")"
-        # . と .. はスキップ
+        # Skip . and ..
         [ "$name" = "." ] || [ "$name" = ".." ] && continue
-        # .git はスキップ
+        # Skip .git
         [ "$name" = ".git" ] && continue
-        # .worktreerc はスキップ（フックとして別途処理）
+        # Skip .worktreerc (handled separately as a hook)
         [ "$name" = ".worktreerc" ] && continue
         items+=("$name")
     done
@@ -123,11 +122,11 @@ list_non_git_items() {
     echo "${items[@]}"
 }
 
-# リポジトリのデフォルトブランチを検出（origin/HEAD から取得）
+# Detect the default branch of a repository (from origin/HEAD)
 detect_default_branch() {
     local repo_path="$1"
 
-    # origin/HEAD が設定されている場合
+    # Use origin/HEAD if set
     local ref
     ref=$(git -C "$repo_path" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)
     if [ -n "$ref" ]; then
@@ -135,7 +134,7 @@ detect_default_branch() {
         return
     fi
 
-    # origin/HEAD が未設定の場合、リモートの HEAD を取得して設定
+    # Try to auto-detect origin/HEAD
     if git -C "$repo_path" remote set-head origin --auto >/dev/null 2>&1; then
         ref=$(git -C "$repo_path" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)
         if [ -n "$ref" ]; then
@@ -144,13 +143,13 @@ detect_default_branch() {
         fi
     fi
 
-    # フォールバック: main or master
+    # Fallback: main or master
     if git -C "$repo_path" rev-parse --verify origin/main >/dev/null 2>&1; then
         echo "main"
     elif git -C "$repo_path" rev-parse --verify origin/master >/dev/null 2>&1; then
         echo "master"
     else
-        log_error "デフォルトブランチを検出できません: $repo_path"
+        log_error "Cannot detect default branch: $repo_path"
         return 1
     fi
 }
