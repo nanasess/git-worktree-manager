@@ -11,7 +11,7 @@ teardown_file() {
     cleanup_test_env
 }
 
-@test "create: 単一リポジトリで worktree が作成される" {
+@test "create: worktree is created for single repo" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" create test-task --no-install
     assert_success
@@ -21,46 +21,46 @@ teardown_file() {
     git -C "$SINGLE_REPO_DIR" rev-parse --verify test-task
 }
 
-@test "create: CLAUDE.md に Worktree Context が付加される" {
+@test "create: CLAUDE.md includes Worktree Context" {
     if [ ! -f "${SINGLE_REPO_DIR}/CLAUDE.md" ]; then
-        skip "CLAUDE.md なし"
+        skip "No CLAUDE.md"
     fi
     [ -f "${WORKTREES_DIR}/test-task/CLAUDE.md" ]
     grep -q "Worktree Context" "${WORKTREES_DIR}/test-task/CLAUDE.md"
 }
 
-@test "create: 同名タスクの二重作成でエラー" {
+@test "create: duplicate task name fails" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" create test-task --no-install
     assert_failure
 }
 
-@test "list: test-task が表示される" {
+@test "list: shows test-task" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" list
     assert_success
     assert_output --partial "test-task"
 }
 
-@test "pull: exit 0" {
+@test "pull: exits 0" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" pull
     assert_success
 }
 
-@test "checkout main: exit 0" {
+@test "checkout main: exits 0" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" checkout main
     assert_success
 }
 
-@test "checkout デフォルトブランチ: exit 0" {
+@test "checkout default branch: exits 0" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" checkout
     assert_success
 }
 
-@test "cleanup: worktree とブランチが削除される" {
+@test "cleanup: removes worktree and branch" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" cleanup test-task --force --delete-branches
     assert_success
@@ -70,15 +70,15 @@ teardown_file() {
     assert_failure
 }
 
-@test "list: cleanup 後に worktree はありません" {
+@test "list: shows no worktrees after cleanup" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" list
     assert_success
-    assert_output --partial "worktree はありません"
+    assert_output --partial "No worktrees found"
 }
 
-# スラッシュ付きタスク名のテスト
-@test "create: スラッシュ付きタスク名で worktree が作成される" {
+# Slash in task name
+@test "create: works with slash in task name" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" create feature/slash-test --no-install
     assert_success
@@ -87,14 +87,14 @@ teardown_file() {
     [ -f "${WORKTREES_DIR}/feature/slash-test/.git" ]
 }
 
-@test "list: スラッシュ付きタスク名が正しく表示される" {
+@test "list: correctly displays slash task name" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" list
     assert_success
     assert_output --partial "feature/slash-test"
 }
 
-@test "cleanup: スラッシュ付きタスク名を削除できる" {
+@test "cleanup: removes slash task name" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" cleanup feature/slash-test --force --delete-branches
     assert_success

@@ -1,16 +1,16 @@
 #!/bin/bash
 #
-# cmd_pull.sh - pull サブコマンド
+# cmd_pull.sh - pull subcommand
 #
 
 cmd_pull_usage() {
-    echo -e "${BOLD}worktree pull${NC} - 配下の git リポジトリを一括で pull"
+    echo -e "${BOLD}worktree pull${NC} - Pull all repositories"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
     echo "    worktree pull [OPTIONS]"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
-    echo "    -h, --help    ヘルプを表示"
+    echo "    -h, --help    Show help"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
     echo "    cd ~/git-repos/EcAuth && worktree pull"
@@ -18,7 +18,7 @@ cmd_pull_usage() {
 }
 
 cmd_pull() {
-    # オプション解析
+    # Parse options
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)
@@ -26,12 +26,12 @@ cmd_pull() {
                 return 0
                 ;;
             -*)
-                log_error "不明なオプション: $1"
+                log_error "Unknown option: $1"
                 cmd_pull_usage
                 return 1
                 ;;
             *)
-                log_error "不明な引数: $1"
+                log_error "Unknown argument: $1"
                 cmd_pull_usage
                 return 1
                 ;;
@@ -44,13 +44,13 @@ cmd_pull() {
     local project_name
     project_name="$(get_project_name)"
 
-    # git リポジトリを列挙
+    # List git repositories
     local repos_str
     repos_str="$(list_git_repos)"
     read -ra repos <<< "$repos_str"
 
     if [ ${#repos[@]} -eq 0 ]; then
-        log_error "git リポジトリが見つかりません: ${project_root}"
+        log_error "No git repositories found: ${project_root}"
         return 1
     fi
 
@@ -59,7 +59,7 @@ cmd_pull() {
     echo -e " ${BOLD}worktree pull${NC}: ${project_name}"
     echo "============================================"
     echo ""
-    # 表示用リポジトリ名
+    # Display names
     local display_repos=()
     for repo in "${repos[@]}"; do
         if [ "$repo" = "." ]; then
@@ -69,11 +69,11 @@ cmd_pull() {
         fi
     done
 
-    log_info "ディレクトリ: ${project_root}"
-    log_info "対象リポジトリ (${#repos[@]}): ${display_repos[*]}"
+    log_info "Directory: ${project_root}"
+    log_info "Repositories (${#repos[@]}): ${display_repos[*]}"
     echo ""
 
-    # 結果格納
+    # Store results
     declare -A RESULTS
 
     local i=0
@@ -83,32 +83,32 @@ cmd_pull() {
         i=$((i + 1))
 
         echo "------------------------------------------"
-        log_info "処理中: ${display_name}"
+        log_info "Processing: ${display_name}"
 
-        # 現在のブランチを表示
+        # Show current branch
         local current_branch
         current_branch="$(git -C "$repo_path" branch --show-current 2>/dev/null)"
         if [ -n "$current_branch" ]; then
-            log_info "  ブランチ: ${current_branch}"
+            log_info "  Branch: ${current_branch}"
         fi
 
         # git pull
         local pull_output
         if pull_output=$(LC_ALL=C git -C "$repo_path" pull --ff-only 2>&1); then
             if echo "$pull_output" | grep -q "Already up to date"; then
-                log_success "  最新です"
-                RESULTS["$display_name"]="OK: 最新"
+                log_success "  Already up to date"
+                RESULTS["$display_name"]="OK: up to date"
             else
-                log_success "  pull しました"
-                RESULTS["$display_name"]="OK: 更新あり"
+                log_success "  Pulled successfully"
+                RESULTS["$display_name"]="OK: updated"
             fi
         else
-            log_error "  pull に失敗しました"
+            log_error "  Pull failed"
             echo "$pull_output" | sed 's/^/    /'
-            RESULTS["$display_name"]="FAIL: pull 失敗"
+            RESULTS["$display_name"]="FAIL: pull failed"
         fi
     done
 
-    # 結果サマリ
+    # Result summary
     print_summary RESULTS "${display_repos[@]}"
 }

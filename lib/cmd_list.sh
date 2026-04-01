@@ -1,16 +1,16 @@
 #!/bin/bash
 #
-# cmd_list.sh - list サブコマンド
+# cmd_list.sh - list subcommand
 #
 
 cmd_list_usage() {
-    echo -e "${BOLD}worktree list${NC} - 現在の worktree 一覧を表示"
+    echo -e "${BOLD}worktree list${NC} - List current worktrees"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
     echo "    worktree list [OPTIONS]"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
-    echo "    -h, --help    ヘルプを表示"
+    echo "    -h, --help    Show help"
     echo ""
     echo -e "${BOLD}ALIASES:${NC}"
     echo "    worktree ls"
@@ -24,7 +24,7 @@ cmd_list() {
                 return 0
                 ;;
             *)
-                log_error "不明なオプション: $1"
+                log_error "Unknown option: $1"
                 cmd_list_usage
                 return 1
                 ;;
@@ -38,27 +38,27 @@ cmd_list() {
     worktrees_base="$(get_worktrees_base)"
 
     echo ""
-    echo -e "${BOLD}${project_name}${NC} の worktree 一覧"
+    echo -e "${BOLD}${project_name}${NC} worktrees"
     echo "============================================"
 
     if [ ! -d "$worktrees_base" ]; then
-        log_info "worktree はありません"
+        log_info "No worktrees found"
         echo ""
         return 0
     fi
 
-    # worktrees_base 配下から git worktree を含むタスクディレクトリを探索
-    # タスク名にスラッシュが含まれる場合（例: feature/task-name）にも対応
-    # 単一リポジトリの場合は .git が depth 2 にあるため mindepth 2 を使用
+    # Search for git worktrees under worktrees_base.
+    # Supports slash in task names (e.g., feature/task-name).
+    # Uses mindepth 2 for single repo support (.git at depth 2).
     local task_names=()
     while IFS= read -r git_marker; do
-        # git_marker は以下のいずれか:
-        #   複数リポ: <worktrees_base>/<task_name>/<repo>/.git
-        #   単一リポ: <worktrees_base>/<task_name>/.git
+        # git_marker is one of:
+        #   Multi repo: <worktrees_base>/<task_name>/<repo>/.git
+        #   Single repo: <worktrees_base>/<task_name>/.git
         local repo_dir="${git_marker%/*}"
         local relative="${repo_dir#"$worktrees_base"/}"
 
-        # 構成に応じてタスク名を抽出
+        # Extract task name based on repo type
         local task_name
         if is_single_repo; then
             task_name="$relative"
@@ -66,7 +66,7 @@ cmd_list() {
             task_name="${relative%/*}"
         fi
 
-        # 重複チェック
+        # Dedup
         local found=false
         for existing in "${task_names[@]}"; do
             if [ "$existing" = "$task_name" ]; then
@@ -80,7 +80,7 @@ cmd_list() {
     done < <(find "$worktrees_base" -name ".git" -mindepth 2 2>/dev/null | sort)
 
     if [ ${#task_names[@]} -eq 0 ]; then
-        log_info "worktree はありません"
+        log_info "No worktrees found"
     fi
 
     for task_name in "${task_names[@]}"; do
@@ -90,7 +90,7 @@ cmd_list() {
         echo -e "  ${BOLD}${task_name}${NC}"
         echo "  ------------------------------------------"
 
-        # タスクディレクトリ内のリポジトリを列挙（単一リポ・複数リポ両対応）
+        # List repositories in the task directory (single and multi repo)
         local repo_dirs_str
         repo_dirs_str="$(list_task_repo_dirs "$task_dir")"
         if [ -n "$repo_dirs_str" ]; then
@@ -98,7 +98,7 @@ cmd_list() {
             for repo_dir in "${repo_dirs[@]}"; do
                 local repo_name
                 if [ "$repo_dir" = "$task_dir" ]; then
-                    # 単一リポジトリ: プロジェクト名を表示
+                    # Single repo: show project name
                     repo_name="$(get_project_name)"
                 else
                     repo_name="$(basename "$repo_dir")"
@@ -106,17 +106,20 @@ cmd_list() {
                 local branch
                 branch="$(git -C "$repo_dir" branch --show-current 2>/dev/null || echo "?")"
 
-                # 変更状態を確認
+                # Check for modifications
                 local status_icon=""
                 if ! git -C "$repo_dir" diff --quiet 2>/dev/null || ! git -C "$repo_dir" diff --cached --quiet 2>/dev/null; then
-                    status_icon=" ${YELLOW}[変更あり]${NC}"
+                    status_icon=" ${YELLOW}[modified]${NC}"
                 fi
 
-                # 未追跡ファイルがあるか確認
+                # Check for untracked files
                 local untracked
-                untracked="$( (git -C "$repo_dir" ls-files --others --exclude-standard 2>/dev/null || true) | head -1)"
+                untracked=$(git -C "$repo_dir" ls-files --others --exclude-standard 2>/dev/null | head -n 1)
+                if [ "${PIPESTATUS[0]}" -ne 0 ] && [ "${PIPESTATUS[0]}" -ne 141 ]; then
+                    untracked=""
+                fi
                 if [ -n "$untracked" ]; then
-                    status_icon="${status_icon} ${YELLOW}[未追跡]${NC}"
+                    status_icon="${status_icon} ${YELLOW}[untracked]${NC}"
                 fi
 
                 echo -e "    ${repo_name}: ${GREEN}${branch}${NC}${status_icon}"

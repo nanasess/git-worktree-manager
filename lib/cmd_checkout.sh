@@ -1,19 +1,19 @@
 #!/bin/bash
 #
-# cmd_checkout.sh - checkout サブコマンド
+# cmd_checkout.sh - checkout subcommand
 #
 
 cmd_checkout_usage() {
-    echo -e "${BOLD}worktree checkout${NC} - 配下の git リポジトリを一括でチェックアウト"
+    echo -e "${BOLD}worktree checkout${NC} - Checkout a branch on all repositories"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
     echo "    worktree checkout [BRANCH] [OPTIONS]"
     echo ""
     echo -e "${BOLD}ARGUMENTS:${NC}"
-    echo "    BRANCH    チェックアウトするブランチ名（省略時: 各リポジトリのデフォルトブランチ）"
+    echo "    BRANCH    Branch to checkout (default: each repo's default branch)"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
-    echo "    -h, --help    ヘルプを表示"
+    echo "    -h, --help    Show help"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
     echo "    cd ~/git-repos/EcAuth && worktree checkout"
@@ -24,7 +24,7 @@ cmd_checkout_usage() {
 cmd_checkout() {
     local branch=""
 
-    # オプション解析
+    # Parse options
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)
@@ -32,7 +32,7 @@ cmd_checkout() {
                 return 0
                 ;;
             -*)
-                log_error "不明なオプション: $1"
+                log_error "Unknown option: $1"
                 cmd_checkout_usage
                 return 1
                 ;;
@@ -40,7 +40,7 @@ cmd_checkout() {
                 if [ -z "$branch" ]; then
                     branch="$1"
                 else
-                    log_error "不明な引数: $1"
+                    log_error "Unknown argument: $1"
                     cmd_checkout_usage
                     return 1
                 fi
@@ -54,13 +54,13 @@ cmd_checkout() {
     local project_name
     project_name="$(get_project_name)"
 
-    # git リポジトリを列挙
+    # List git repositories
     local repos_str
     repos_str="$(list_git_repos)"
     read -ra repos <<< "$repos_str"
 
     if [ ${#repos[@]} -eq 0 ]; then
-        log_error "git リポジトリが見つかりません: ${project_root}"
+        log_error "No git repositories found: ${project_root}"
         return 1
     fi
 
@@ -68,7 +68,7 @@ cmd_checkout() {
     if [ -n "$branch" ]; then
         target_desc="$branch"
     else
-        target_desc="デフォルトブランチ"
+        target_desc="default branch"
     fi
 
     echo ""
@@ -76,7 +76,7 @@ cmd_checkout() {
     echo -e " ${BOLD}worktree checkout${NC}: ${project_name}"
     echo "============================================"
     echo ""
-    # 表示用リポジトリ名
+    # Display names
     local display_repos=()
     for repo in "${repos[@]}"; do
         if [ "$repo" = "." ]; then
@@ -86,12 +86,12 @@ cmd_checkout() {
         fi
     done
 
-    log_info "ディレクトリ: ${project_root}"
-    log_info "対象リポジトリ (${#repos[@]}): ${display_repos[*]}"
-    log_info "チェックアウト先: ${target_desc}"
+    log_info "Directory: ${project_root}"
+    log_info "Repositories (${#repos[@]}): ${display_repos[*]}"
+    log_info "Checkout target: ${target_desc}"
     echo ""
 
-    # 結果格納
+    # Store results
     declare -A RESULTS
 
     local i=0
@@ -101,44 +101,44 @@ cmd_checkout() {
         i=$((i + 1))
 
         echo "------------------------------------------"
-        log_info "処理中: ${display_name}"
+        log_info "Processing: ${display_name}"
 
-        # チェックアウト先ブランチを決定
+        # Determine target branch
         local target_branch
         if [ -n "$branch" ]; then
             target_branch="$branch"
         else
             target_branch="$(detect_default_branch "$repo_path")" || {
-                log_error "  デフォルトブランチの検出に失敗しました"
-                RESULTS["$display_name"]="FAIL: ブランチ検出失敗"
+                log_error "  Failed to detect default branch"
+                RESULTS["$display_name"]="FAIL: branch detection failed"
                 continue
             }
         fi
 
-        # 現在のブランチを表示
+        # Show current branch
         local current_branch
         current_branch="$(git -C "$repo_path" branch --show-current 2>/dev/null)"
         if [ -n "$current_branch" ]; then
             if [ "$current_branch" = "$target_branch" ]; then
-                log_success "  既に ${target_branch} です"
-                RESULTS["$display_name"]="OK: 変更なし"
+                log_success "  Already on ${target_branch}"
+                RESULTS["$display_name"]="OK: no change"
                 continue
             fi
-            log_info "  ${current_branch} → ${target_branch}"
+            log_info "  ${current_branch} -> ${target_branch}"
         fi
 
         # git checkout
         local checkout_output
         if checkout_output=$(LC_ALL=C git -C "$repo_path" checkout "$target_branch" 2>&1); then
-            log_success "  ${target_branch} にチェックアウトしました"
+            log_success "  Checked out ${target_branch}"
             RESULTS["$display_name"]="OK: ${target_branch}"
         else
-            log_error "  チェックアウトに失敗しました"
+            log_error "  Checkout failed"
             echo "$checkout_output" | sed 's/^/    /'
-            RESULTS["$display_name"]="FAIL: checkout 失敗"
+            RESULTS["$display_name"]="FAIL: checkout failed"
         fi
     done
 
-    # 結果サマリ
+    # Result summary
     print_summary RESULTS "${display_repos[@]}"
 }

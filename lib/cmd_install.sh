@@ -1,22 +1,22 @@
 #!/bin/bash
 #
-# cmd_install.sh - install サブコマンド
+# cmd_install.sh - install subcommand
 #
 
 cmd_install_usage() {
-    echo -e "${BOLD}worktree install${NC} - Claude Code skills をインストール"
+    echo -e "${BOLD}worktree install${NC} - Install Claude Code skills"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
     echo "    worktree install --skills [OPTIONS]"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
-    echo "    --skills              Claude Code skills をプロジェクトにインストール"
-    echo "    --global              ~/.claude/skills/ にインストール（全プロジェクト共通）"
-    echo "    -h, --help            ヘルプを表示"
+    echo "    --skills              Install Claude Code skills to project"
+    echo "    --global              Install to ~/.claude/skills/ (all projects)"
+    echo "    -h, --help            Show help"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
-    echo "    worktree install --skills            # .claude/skills/ にインストール"
-    echo "    worktree install --skills --global   # ~/.claude/skills/ にインストール"
+    echo "    worktree install --skills            # Install to .claude/skills/"
+    echo "    worktree install --skills --global   # Install to ~/.claude/skills/"
 }
 
 cmd_install() {
@@ -36,7 +36,7 @@ cmd_install() {
                 return 0
                 ;;
             *)
-                log_error "不明なオプション: $1"
+                log_error "Unknown option: $1"
                 cmd_install_usage
                 return 1
                 ;;
@@ -45,7 +45,7 @@ cmd_install() {
     done
 
     if [ "$install_skills" = false ]; then
-        log_error "--skills を指定してください"
+        log_error "--skills is required"
         cmd_install_usage
         return 1
     fi
@@ -60,7 +60,7 @@ cmd_install() {
     fi
 
     if [ ! -d "$skills_src" ]; then
-        log_error "skills ディレクトリが見つかりません: $skills_src"
+        log_error "Skills directory not found: $skills_src"
         return 1
     fi
 
@@ -69,8 +69,8 @@ cmd_install() {
     echo -e " ${BOLD}worktree install --skills${NC}"
     echo "============================================"
     echo ""
-    log_info "インストール元: ${skills_src}"
-    log_info "インストール先: ${target_dir}"
+    log_info "Source: ${skills_src}"
+    log_info "Target: ${target_dir}"
     echo ""
 
     local installed=0
@@ -82,11 +82,10 @@ cmd_install() {
         skill_name="$(basename "$skill_dir")"
         local dest="${target_dir}/${skill_name}"
 
-        local msg_verb="インストールしました"
+        local msg_verb="installed"
         if [ -d "$dest" ]; then
-            # 既存のスキルを更新
             rm -rf "$dest"
-            msg_verb="更新しました"
+            msg_verb="updated"
         fi
         cp -r "$skill_dir" "$dest"
         log_success "${skill_name}: ${msg_verb}"
@@ -95,14 +94,16 @@ cmd_install() {
 
     echo ""
     if [ "$installed" -gt 0 ]; then
-        log_success "${installed} 個の skills をインストールしました"
+        log_success "${installed} skill(s) installed"
         echo ""
-        echo "利用可能なスキル:"
-        echo "  /worktree-create <task-name>   worktree を一括作成"
-        echo "  /worktree-list                 worktree 一覧を表示"
-        echo "  /worktree-cleanup <task-name>  worktree を一括削除"
+        echo "Available skills:"
+        echo "  /worktree-create <task-name>   Create worktrees"
+        echo "  /worktree-list                 List worktrees"
+        echo "  /worktree-cleanup <task-name>  Cleanup worktrees"
+        echo "  /worktree-checkout [branch]    Checkout a branch on all repos"
+        echo "  /worktree-pull                 Pull all repos"
     else
-        log_warn "インストール可能な skills がありません"
+        log_warn "No skills available to install"
     fi
     echo ""
 }

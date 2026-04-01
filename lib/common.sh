@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# common.sh - 共通関数（ログ出力、パス算出）
+# common.sh - Common functions (logging, path calculation)
 #
 
-# 色定義
+# Color definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -27,12 +27,12 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# プロジェクトルートのパスを取得
-# .worktrees ディレクトリ内から実行された場合は元のプロジェクトルートを返す
+# Get the project root path.
+# When run from inside a .worktrees directory, returns the original project root.
 get_project_root() {
     local cwd
     cwd="$(pwd)"
-    # パスに .worktrees が含まれる場合、元のプロジェクトルートを算出
+    # If path contains .worktrees, calculate the original project root
     case "$cwd" in
         *.worktrees/*)
             local worktrees_dir="${cwd%%\.worktrees/*}.worktrees"
@@ -47,12 +47,12 @@ get_project_root() {
     esac
 }
 
-# プロジェクト名を取得（ディレクトリ名）
+# Get the project name (directory name)
 get_project_name() {
     basename "$(get_project_root)"
 }
 
-# worktrees ディレクトリのパスを算出
+# Calculate the worktrees base directory path
 # <project_root>/../<project_name>.worktrees/
 get_worktrees_base() {
     local project_root
@@ -62,14 +62,14 @@ get_worktrees_base() {
     echo "$(dirname "$project_root")/${project_name}.worktrees"
 }
 
-# 特定タスクの worktree パスを算出
+# Calculate the worktree path for a specific task
 get_task_dir() {
     local task_name="$1"
     echo "$(get_worktrees_base)/${task_name}"
 }
 
-# CLAUDE.md にワークツリーコンテキストを付加して生成
-# /compact 後もエージェントが作業ディレクトリを忘れないようにする
+# Generate CLAUDE.md with worktree context prepended.
+# Ensures the agent remembers the working directory after /compact.
 generate_worktree_claude_md() {
     local src="$1"
     local dst="$2"
@@ -81,19 +81,18 @@ generate_worktree_claude_md() {
         cat <<WORKTREE_CONTEXT
 # Worktree Context
 
-このディレクトリは \`worktree create ${task_name}\` で作成された作業用ワークツリーです。
+This directory was created by \`worktree create ${task_name}\` as a working worktree.
 
-- **タスク名**: ${task_name}
-- **作業ディレクトリ**: ${task_dir}
-- **プロジェクトルート（参照元）**: ${project_root}
+- **Task name**: ${task_name}
+- **Working directory**: ${task_dir}
+- **Project root (source)**: ${project_root}
 
-> **重要**: すべてのコード変更は必ずこのディレクトリ (\`${task_dir}\`) 内で行ってください。
-> プロジェクトルート (\`${project_root}\`) を直接変更しないでください。
+> **Important**: All code changes must be made within this directory (\`${task_dir}\`).
+> Do not modify the project root (\`${project_root}\`) directly.
 
-## 動作確認
+## Testing
 
-このワークツリーには Docker Compose 環境がありません。
-動作確認が必要な場合は、プロジェクトルート (\`${project_root}\`) で該当ブランチをチェックアウトして行ってください。
+Run \`docker compose up\` or other commands within this directory (\`${task_dir}\`) to verify changes.
 
 ---
 
@@ -102,8 +101,8 @@ WORKTREE_CONTEXT
     } > "$dst"
 }
 
-# 結果サマリ表示用
-# Usage: declare -A RESULTS を事前に行い、print_summary RESULTS repo_list
+# Print result summary
+# Usage: declare -A RESULTS, then print_summary RESULTS repo_list
 print_summary() {
     local -n _results=$1
     shift
@@ -111,7 +110,7 @@ print_summary() {
 
     echo ""
     echo "============================================"
-    echo " 結果サマリ"
+    echo " Summary"
     echo "============================================"
     for repo in "${repos[@]}"; do
         local result="${_results[$repo]:-SKIPPED}"
