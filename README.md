@@ -124,6 +124,8 @@ worktree cleanup --merged --force --delete-branches
 worktree cleanup --merged --dry-run
 ```
 
+Aliases: `worktree clean`, `worktree rm`
+
 | Option | Description |
 |---|---|
 | `--merged` | Auto-detect merged tasks |
