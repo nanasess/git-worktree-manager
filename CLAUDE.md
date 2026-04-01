@@ -47,6 +47,15 @@ git submodule update --init --recursive
 ./test/bats/bin/bats test/*.bats
 ```
 
+## コマンド追加・修正時のチェックリスト
+
+コマンドを追加または修正した場合、以下を必ず実施すること:
+
+1. **テスト更新** — `test/single_repo.bats` および `test/multi_repo.bats` にテストケースを追加・修正
+2. **README.md 更新** — Usage セクションにコマンドの説明を追加・修正
+3. **CLAUDE.md 更新** — コマンド一覧を更新
+4. **Skills 更新** — `skills/` 配下の SKILL.md を追加・修正。`lib/cmd_install.sh` の Available skills 表示も更新
+
 ## 言語ルール
 
 - **CLAUDE.md 以外はすべて英語** で記述する
