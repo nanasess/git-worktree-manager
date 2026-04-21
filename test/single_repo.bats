@@ -189,3 +189,28 @@ teardown_file() {
     # Clean up the stale branch that we created for the regression test
     git -C "$SINGLE_REPO_DIR" branch -D "dependabot/npm_and_yarn/handlebars-4.7.9" 2>/dev/null || true
 }
+
+# Fork workflow: origin points at a fork, upstream points at the canonical repo.
+# The URL targets the canonical repo, so the match must come from 'upstream'
+# and the subsequent PR fetch must also use 'upstream'.
+@test "checkout: PR URL matches a non-origin remote (upstream)" {
+    cd "$SINGLE_REPO_DIR"
+    git -C "$SINGLE_REPO_DIR" remote set-url origin "https://github.com/fork-owner/setup-chromedriver.git"
+    git -C "$SINGLE_REPO_DIR" remote add upstream "https://github.com/nanasess/setup-chromedriver.git"
+
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/pull/443 --no-install
+    assert_success
+    assert_output --partial "remote: upstream"
+
+    [ -d "${WORKTREES_DIR}/pr-443" ]
+    [ -f "${WORKTREES_DIR}/pr-443/.git" ]
+}
+
+@test "cleanup: removes upstream-matched PR worktree and restores remotes" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup pr-443 --force --delete-branches
+    assert_success
+    # Restore remote configuration for subsequent tests (if any)
+    git -C "$SINGLE_REPO_DIR" remote remove upstream 2>/dev/null || true
+    git -C "$SINGLE_REPO_DIR" remote set-url origin "https://github.com/nanasess/setup-chromedriver.git"
+}

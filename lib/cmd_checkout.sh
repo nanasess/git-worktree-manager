@@ -39,8 +39,44 @@ parse_github_url() {
     return 1
 }
 
-# Find the sub-repository in the current project whose origin URL matches
-# <owner>/<repo>. Outputs the repo name ("." for single repo). Returns 1 if none.
+# Parse a git remote URL to extract the GitHub owner/repo pair.
+# Handles https://, http://, ssh://, git://, and SSH shortcut (git@host:owner/repo).
+# Also tolerates an explicit port number (e.g., github.com:443/owner/repo).
+# Stdout on success: "<owner> <repo>". Returns 1 if the URL is not a github.com URL.
+parse_github_remote_url() {
+    local url="$1"
+    # Normalize: strip trailing slash and .git suffix
+    url="${url%/}"
+    url="${url%.git}"
+
+    # Only consider github.com remotes
+    case "$url" in
+        *github.com*) ;;
+        *) return 1 ;;
+    esac
+
+    # Take everything after the last occurrence of "github.com"
+    local tail="${url##*github.com}"
+    # Strip a leading port specifier like ":443" or ":22" if present
+    if [[ "$tail" =~ ^:[0-9]+(.*)$ ]]; then
+        tail="${BASH_REMATCH[1]}"
+    fi
+    # Strip the single leading separator (":" for SSH shortcut, "/" for HTTPS/ssh://)
+    tail="${tail#[:/]}"
+
+    # Expect "owner/repo" with no further slashes
+    if [[ "$tail" =~ ^([^/]+)/([^/]+)$ ]]; then
+        echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+        return 0
+    fi
+    return 1
+}
+
+# Find the sub-repository in the current project whose remote URL matches
+# <owner>/<repo>. Checks every configured remote (not just origin), so fork
+# setups with origin=fork and upstream=canonical work correctly.
+# Stdout on success: "<repo_name> <remote_name>" (repo_name is "." for single repo).
+# Returns 1 if no remote matches.
 find_repo_by_remote() {
     local owner="$1"
     local repo="$2"
@@ -50,21 +86,31 @@ find_repo_by_remote() {
     repos_str="$(list_git_repos)"
     read -ra repos <<< "$repos_str"
 
-    local re='github\.com[:/]+([^/]+)/([^/]+)$'
     for r in "${repos[@]}"; do
         local path="$project_root"
         [ "$r" != "." ] && path="${project_root}/${r}"
-        local origin_url
-        origin_url="$(git -C "$path" remote get-url origin 2>/dev/null)" || continue
-        # Strip trailing slash and .git suffix before matching
-        origin_url="${origin_url%/}"
-        origin_url="${origin_url%.git}"
-        if [[ "$origin_url" =~ $re ]]; then
-            if [ "${BASH_REMATCH[1]}" = "$owner" ] && [ "${BASH_REMATCH[2]}" = "$repo" ]; then
-                echo "$r"
+        local remotes
+        remotes="$(git -C "$path" remote 2>/dev/null)" || continue
+        # Prefer origin when it matches so the output remains stable for common
+        # setups; then check remaining remotes for fork/upstream configurations.
+        local ordered_remotes=""
+        if echo "$remotes" | grep -qx "origin"; then
+            ordered_remotes+=$'origin\n'
+        fi
+        ordered_remotes+="$(echo "$remotes" | grep -vx "origin" || true)"
+        while IFS= read -r remote_name; do
+            [ -z "$remote_name" ] && continue
+            local url
+            url="$(git -C "$path" remote get-url "$remote_name" 2>/dev/null)" || continue
+            local parsed
+            parsed="$(parse_github_remote_url "$url")" || continue
+            local o rname
+            read -r o rname <<< "$parsed"
+            if [ "$o" = "$owner" ] && [ "$rname" = "$repo" ]; then
+                echo "$r $remote_name"
                 return 0
             fi
-        fi
+        done <<< "$ordered_remotes"
     done
     return 1
 }
@@ -140,12 +186,14 @@ cmd_checkout_pr() {
     project_root="$(get_project_root)"
     project_name="$(get_project_name)"
 
-    local matching_repo
-    matching_repo="$(find_repo_by_remote "$owner" "$repo" "$project_root")" || {
+    local match
+    match="$(find_repo_by_remote "$owner" "$repo" "$project_root")" || {
         log_error "No repository in ${project_root} matches ${owner}/${repo}"
         log_error "Run 'worktree checkout' from a project whose clone points at ${owner}/${repo}"
         return 1
     }
+    local matching_repo matching_remote
+    read -r matching_repo matching_remote <<< "$match"
 
     local task_name="pr-${pr_number}"
     local task_dir
@@ -165,7 +213,7 @@ cmd_checkout_pr() {
     log_info "Project: ${project_name} (${project_root})"
     log_info "PR: ${owner}/${repo}#${pr_number}"
     log_info "PR branch: ${head_ref}"
-    log_info "Target repo: ${matching_repo_display}"
+    log_info "Target repo: ${matching_repo_display} (remote: ${matching_remote})"
     log_info "Task directory: ${task_dir}"
     echo ""
 
@@ -176,9 +224,11 @@ cmd_checkout_pr() {
 
     # Always fetch the PR head fresh into a non-branch ref so we don't touch
     # the user's existing local branches until we've decided a safe name.
+    # Fetch from the remote that actually points at the PR's repository
+    # (which may be "upstream" in fork workflows, not "origin").
     local pr_fetch_ref="refs/pr-fetch/${pr_number}"
-    log_info "Fetching PR #${pr_number} head..."
-    if ! git -C "$matching_repo_path" fetch origin "+pull/${pr_number}/head:${pr_fetch_ref}" 2>&1; then
+    log_info "Fetching PR #${pr_number} head from ${matching_remote}..."
+    if ! git -C "$matching_repo_path" fetch "$matching_remote" "+pull/${pr_number}/head:${pr_fetch_ref}" 2>&1; then
         log_error "Failed to fetch PR #${pr_number}"
         return 1
     fi
