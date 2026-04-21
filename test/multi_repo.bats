@@ -95,6 +95,35 @@ teardown_file() {
     assert_output --partial "No worktrees found"
 }
 
+# mise config inheritance per sub-repo.
+# Use mise.local.toml (conventionally gitignored) to avoid clashing with any
+# mise.toml that may already be tracked in upstream sub-repos.
+@test "create: inherits untracked mise.local.toml per sub-repo" {
+    cd "$MULTI_REPO_DIR"
+    for repo in EcAuth ecauth-website ecauth-auth-js; do
+        printf '[tools]\nphp = "8.3"\n' > "${MULTI_REPO_DIR}/${repo}/mise.local.toml"
+    done
+
+    run "$WORKTREE_CMD" create mise-task --no-install
+    assert_success
+
+    for repo in EcAuth ecauth-website ecauth-auth-js; do
+        [ -f "${WORKTREES_DIR}/mise-task/${repo}/mise.local.toml" ]
+        diff "${MULTI_REPO_DIR}/${repo}/mise.local.toml" "${WORKTREES_DIR}/mise-task/${repo}/mise.local.toml"
+    done
+}
+
+@test "cleanup: removes mise-task" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup mise-task --force --delete-branches
+    assert_success
+
+    [ ! -d "${WORKTREES_DIR}/mise-task" ]
+    for repo in EcAuth ecauth-website ecauth-auth-js; do
+        rm -f "${MULTI_REPO_DIR}/${repo}/mise.local.toml"
+    done
+}
+
 # URL-based checkout (PR scoped to one repo)
 @test "checkout: PR URL creates worktree only for matching repo" {
     cd "$MULTI_REPO_DIR"

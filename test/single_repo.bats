@@ -102,6 +102,30 @@ teardown_file() {
     [ ! -d "${WORKTREES_DIR}/feature/slash-test" ]
 }
 
+# mise config inheritance
+@test "create: inherits untracked mise.toml and mise.local.toml" {
+    cd "$SINGLE_REPO_DIR"
+    printf '[tools]\nnode = "20"\n' > "${SINGLE_REPO_DIR}/mise.toml"
+    printf '[tools]\nphp = "8.3"\n' > "${SINGLE_REPO_DIR}/mise.local.toml"
+
+    run "$WORKTREE_CMD" create mise-task --no-install
+    assert_success
+
+    [ -f "${WORKTREES_DIR}/mise-task/mise.toml" ]
+    [ -f "${WORKTREES_DIR}/mise-task/mise.local.toml" ]
+    diff "${SINGLE_REPO_DIR}/mise.toml" "${WORKTREES_DIR}/mise-task/mise.toml"
+    diff "${SINGLE_REPO_DIR}/mise.local.toml" "${WORKTREES_DIR}/mise-task/mise.local.toml"
+}
+
+@test "cleanup: removes mise-task" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup mise-task --force --delete-branches
+    assert_success
+
+    [ ! -d "${WORKTREES_DIR}/mise-task" ]
+    rm -f "${SINGLE_REPO_DIR}/mise.toml" "${SINGLE_REPO_DIR}/mise.local.toml"
+}
+
 # URL-based checkout
 @test "checkout: invalid URL fails cleanly" {
     cd "$SINGLE_REPO_DIR"
