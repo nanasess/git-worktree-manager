@@ -110,6 +110,20 @@ teardown_file() {
     assert_output --partial "Invalid GitHub URL"
 }
 
+@test "checkout: --branch-prefix without value fails cleanly" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/issues/2 --branch-prefix
+    assert_failure
+    assert_output --partial "--branch-prefix requires a value"
+}
+
+@test "create: --branch-prefix without value fails cleanly" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" create some-task --branch-prefix
+    assert_failure
+    assert_output --partial "--branch-prefix requires a value"
+}
+
 @test "checkout: issue URL creates issue-<N> worktree" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/issues/2 --no-install

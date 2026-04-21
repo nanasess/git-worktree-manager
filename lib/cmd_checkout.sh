@@ -167,7 +167,13 @@ cmd_checkout_pr() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --no-install) no_install=true ;;
-            --branch-prefix) shift ;; # ignored for PR mode
+            --branch-prefix)
+                # Ignored for PR mode: the branch name comes from the PR head.
+                # Consume the value too, but guard against it being missing.
+                if [ $# -ge 2 ]; then
+                    shift
+                fi
+                ;;
         esac
         shift
     done
@@ -373,6 +379,11 @@ cmd_checkout() {
                 passthrough+=("$1")
                 ;;
             --branch-prefix)
+                if [ $# -lt 2 ]; then
+                    log_error "--branch-prefix requires a value"
+                    cmd_checkout_usage
+                    return 1
+                fi
                 shift
                 passthrough+=("--branch-prefix" "$1")
                 ;;
