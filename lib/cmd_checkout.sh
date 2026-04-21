@@ -99,8 +99,7 @@ cmd_checkout_issue() {
     if command -v gh >/dev/null 2>&1; then
         log_info "Verifying issue #${number} in ${owner}/${repo}..."
         if ! gh issue view "$number" --repo "${owner}/${repo}" --json number >/dev/null 2>&1; then
-            log_error "Issue #${number} not found in ${owner}/${repo}"
-            return 1
+            log_warn "gh could not verify the issue (missing auth or network issue) — proceeding without verification"
         fi
     else
         log_warn "gh CLI not found — skipping issue verification"
@@ -130,14 +129,11 @@ cmd_checkout_pr() {
     local head_ref=""
     if command -v gh >/dev/null 2>&1; then
         log_info "Fetching PR #${pr_number} info from ${owner}/${repo}..."
-        head_ref="$(gh pr view "$pr_number" --repo "${owner}/${repo}" --json headRefName --jq .headRefName 2>/dev/null)"
-        if [ -z "$head_ref" ]; then
-            log_error "PR #${pr_number} not found in ${owner}/${repo}"
-            return 1
-        fi
-    else
+        head_ref="$(gh pr view "$pr_number" --repo "${owner}/${repo}" --json headRefName --jq .headRefName 2>/dev/null || true)"
+    fi
+    if [ -z "$head_ref" ]; then
         head_ref="pr-${pr_number}"
-        log_warn "gh CLI not found — local branch will be named '${head_ref}' instead of the PR's head ref"
+        log_warn "gh unavailable or unable to query the PR — using fallback branch name '${head_ref}'"
     fi
 
     local project_root project_name
