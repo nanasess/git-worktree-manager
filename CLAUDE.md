@@ -32,6 +32,14 @@ worktree はプロジェクトの隣に `<project>.worktrees/` として配置�
 
 create 時に CLAUDE.md へ Worktree Context（タスク名、作業ディレクトリ、プロジェクトルート）を付加して生成する。
 
+## mise 設定の引き継ぎ
+
+`worktree create` は、ソース側に `mise.toml` / `mise.local.toml` が存在する場合、それらを新しい worktree にコピーする。gitignored なローカル上書き (`mise.local.toml` など) でも、mise のバージョン固定を引き継げる。
+
+- シングルリポ: プロジェクトルート直下の `mise.toml` / `mise.local.toml`
+- マルチリポ: 各サブリポ直下の `mise.toml` / `mise.local.toml`（プロジェクトルート直下の mise.toml は既存の symlink 機構で扱い済み）
+- worktree 側に同名ファイルが既に存在する場合（tracked で git worktree add 済みなど）はコピーを skip
+
 ## .worktreerc フック
 
 プロジェクトルートに `.worktreerc` を配置し、`post_create()` 関数を定義すると、worktree 作成後に自動実行されます。

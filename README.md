@@ -84,8 +84,9 @@ What happens:
 2. Create worktree based on the default branch
 3. Generate `CLAUDE.md` with worktree context
 4. Symlink non-git items (multi-repo)
-5. Run `.worktreerc` `post_create()` hook
-6. Auto-install dependencies
+5. Copy `mise.toml` / `mise.local.toml` into each worktree (even when gitignored)
+6. Run `.worktreerc` `post_create()` hook
+7. Auto-install dependencies
 
 | Option | Description |
 |---|---|
@@ -172,6 +173,10 @@ Detected automatically during `worktree create`:
 | `*.sln` / `*.csproj` | `dotnet restore` |
 
 Skip with `--no-install`.
+
+## mise Version Inheritance
+
+If `mise.toml` or `mise.local.toml` exists in the source (project root for single-repo, each sub-repo root for multi-repo), `worktree create` copies it into the new worktree. This keeps mise-managed tool versions consistent even when the config is gitignored.
 
 ## Testing
 
