@@ -174,15 +174,55 @@ cmd_checkout_pr() {
         return 1
     fi
 
-    # Fetch PR head into a local branch named after the PR branch
-    if git -C "$matching_repo_path" rev-parse --verify "$head_ref" >/dev/null 2>&1; then
-        log_warn "Local branch ${head_ref} already exists — reusing"
-    else
-        log_info "Fetching PR #${pr_number} head (${head_ref})..."
-        if ! git -C "$matching_repo_path" fetch origin "pull/${pr_number}/head:${head_ref}" 2>&1; then
-            log_error "Failed to fetch PR #${pr_number}"
-            return 1
+    # Always fetch the PR head fresh into a non-branch ref so we don't touch
+    # the user's existing local branches until we've decided a safe name.
+    local pr_fetch_ref="refs/pr-fetch/${pr_number}"
+    log_info "Fetching PR #${pr_number} head..."
+    if ! git -C "$matching_repo_path" fetch origin "+pull/${pr_number}/head:${pr_fetch_ref}" 2>&1; then
+        log_error "Failed to fetch PR #${pr_number}"
+        return 1
+    fi
+
+    # Decide the local branch name. Prefer the PR head ref, but fall back to
+    # "pr-<N>" when the head ref collides with protected/existing branches.
+    local local_branch="$head_ref"
+    local fallback_name="pr-${pr_number}"
+    local fallback_reason=""
+
+    if [ "$local_branch" != "$fallback_name" ]; then
+        local default_branch current_branch
+        default_branch="$(detect_default_branch "$matching_repo_path" 2>/dev/null || true)"
+        current_branch="$(git -C "$matching_repo_path" branch --show-current 2>/dev/null || true)"
+
+        if [[ "$local_branch" = main \
+              || "$local_branch" = master \
+              || "$local_branch" = develop \
+              || "$local_branch" = "$default_branch" \
+              || "$local_branch" = "$current_branch" ]]; then
+            fallback_reason="collides with a protected/default/current branch"
+        elif git -C "$matching_repo_path" rev-parse --verify "refs/heads/${local_branch}" >/dev/null 2>&1; then
+            # Existing local branch. Only keep the name if its tip is an ancestor
+            # of (or equal to) the PR head — otherwise the user's branch has
+            # unrelated work we must not overwrite.
+            local existing_tip pr_head_tip
+            existing_tip="$(git -C "$matching_repo_path" rev-parse "refs/heads/${local_branch}")"
+            pr_head_tip="$(git -C "$matching_repo_path" rev-parse "$pr_fetch_ref")"
+            if [ "$existing_tip" != "$pr_head_tip" ] \
+               && ! git -C "$matching_repo_path" merge-base --is-ancestor "$existing_tip" "$pr_head_tip" 2>/dev/null; then
+                fallback_reason="local branch '${local_branch}' has unrelated commits"
+            fi
         fi
+
+        if [ -n "$fallback_reason" ]; then
+            log_warn "Using fallback branch name '${fallback_name}' (${fallback_reason})"
+            local_branch="$fallback_name"
+        fi
+    fi
+
+    # Force-set the chosen local branch to the freshly fetched PR head.
+    if ! git -C "$matching_repo_path" branch -f "$local_branch" "$pr_fetch_ref" 2>&1; then
+        log_error "Failed to set local branch '${local_branch}' (checked out elsewhere?)"
+        return 1
     fi
 
     # Determine worktree path
@@ -194,8 +234,8 @@ cmd_checkout_pr() {
         worktree_path="${task_dir}/${matching_repo}"
     fi
 
-    log_info "Creating worktree at ${worktree_path}..."
-    if ! git -C "$matching_repo_path" worktree add "$worktree_path" "$head_ref" 2>&1; then
+    log_info "Creating worktree at ${worktree_path} (branch: ${local_branch})..."
+    if ! git -C "$matching_repo_path" worktree add "$worktree_path" "$local_branch" 2>&1; then
         log_error "Failed to create worktree"
         return 1
     fi

@@ -157,3 +157,35 @@ teardown_file() {
 
     [ ! -d "${WORKTREES_DIR}/pr-443" ]
 }
+
+# Regression: stale local branch with PR head ref name must not be reused
+@test "checkout: unrelated local branch with same name falls back to pr-<N>" {
+    cd "$SINGLE_REPO_DIR"
+    # Pre-create a local branch named after the PR's head ref, pointing at
+    # an unrelated commit (master tip, which is NOT the PR head).
+    local pr_head_name="dependabot/npm_and_yarn/handlebars-4.7.9"
+    git branch "$pr_head_name" master
+
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/pull/443 --no-install
+    assert_success
+
+    # Must have used the fallback name, not reused the stale branch
+    local worktree_branch
+    worktree_branch=$(git -C "${WORKTREES_DIR}/pr-443" branch --show-current)
+    [ "$worktree_branch" = "pr-443" ]
+
+    # Worktree must point at the PR head, not the stale local branch
+    local worktree_sha stale_sha
+    worktree_sha=$(git -C "${WORKTREES_DIR}/pr-443" rev-parse HEAD)
+    stale_sha=$(git -C "$SINGLE_REPO_DIR" rev-parse master)
+    [ "$worktree_sha" != "$stale_sha" ]
+}
+
+@test "cleanup: removes fallback pr-<N> worktree" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup pr-443 --force --delete-branches
+    assert_success
+    [ ! -d "${WORKTREES_DIR}/pr-443" ]
+    # Clean up the stale branch that we created for the regression test
+    git -C "$SINGLE_REPO_DIR" branch -D "dependabot/npm_and_yarn/handlebars-4.7.9" 2>/dev/null || true
+}
