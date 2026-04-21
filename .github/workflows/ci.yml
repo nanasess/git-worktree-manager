@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+# Least-privilege token. The self-repo smoke tests need read access to the
+# running repository's PRs and issues so `gh pr view` / `gh issue view`
+# succeed under the default GITHUB_TOKEN. No external PAT is used.
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
 jobs:
   test-single-repo:
     runs-on: ubuntu-latest
@@ -24,3 +32,16 @@ jobs:
           submodules: true
       - name: Run multi-repo tests
         run: ./test/bats/bin/bats test/multi_repo.bats
+
+  test-self-repo-smoke:
+    runs-on: ubuntu-latest
+    env:
+      # gh reads GH_TOKEN for API calls. Use the scoped GITHUB_TOKEN so the
+      # smoke tests can query this repository's own PRs/issues.
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: true
+      - name: Run self-repo smoke tests
+        run: ./test/bats/bin/bats test/self_repo_smoke.bats

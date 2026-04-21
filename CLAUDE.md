@@ -62,6 +62,11 @@ git submodule update --init --recursive
 ./test/bats/bin/bats test/*.bats
 ```
 
+### テストファイルの役割
+
+- `test/single_repo.bats` / `test/multi_repo.bats`: 外部リポを clone して URL 解析・fallback・衝突検出などを検証。`gh` 認証は必須ではない（CI の `GITHUB_TOKEN` は外部リポにアクセスできないため fallback 経路を検証）。
+- `test/self_repo_smoke.bats`: 本リポの PR/Issue URL を使って `gh` 成功時のパス（head_ref 保持・worktree マッチング）を smoke test。CI では `GITHUB_TOKEN` が本リポ自身へアクセスできるので PAT 不要。`gh` が使えない環境では各テストが skip される。
+
 ## コマンド追加・修正時のチェックリスト
 
 コマンドを追加または修正した場合、以下を必ず実施すること:
