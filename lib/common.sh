@@ -113,8 +113,11 @@ copy_mise_configs() {
         local src_file="${src}/${name}"
         local dst_file="${dst}/${name}"
         if [ -f "$src_file" ] && [ ! -e "$dst_file" ]; then
-            cp "$src_file" "$dst_file"
-            log_info "  ${name} -> copied (from ${src_file})"
+            if cp "$src_file" "$dst_file"; then
+                log_info "  ${name} -> copied (from ${src_file})"
+            else
+                log_warn "  Failed to copy ${name} (continuing)"
+            fi
         fi
     done
 }
