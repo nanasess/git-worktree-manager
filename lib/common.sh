@@ -101,6 +101,24 @@ WORKTREE_CONTEXT
     } > "$dst"
 }
 
+# Copy mise config files (mise.toml, mise.local.toml) from source to destination.
+# Skips files that do not exist in the source, or already exist in the destination
+# (git worktree add already provides tracked copies).
+# Usage: copy_mise_configs <source_dir> <dest_dir>
+copy_mise_configs() {
+    local src="$1"
+    local dst="$2"
+
+    for name in mise.toml mise.local.toml; do
+        local src_file="${src}/${name}"
+        local dst_file="${dst}/${name}"
+        if [ -f "$src_file" ] && [ ! -e "$dst_file" ]; then
+            cp "$src_file" "$dst_file"
+            log_info "  ${name} -> copied (from ${src_file})"
+        fi
+    done
+}
+
 # Print result summary
 # Usage: declare -A RESULTS, then print_summary RESULTS repo_list
 print_summary() {

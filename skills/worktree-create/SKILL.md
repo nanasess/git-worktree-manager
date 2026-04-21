@@ -21,8 +21,9 @@ worktree create $ARGUMENTS
 3. Creates a worktree for each repository based on origin/HEAD (default branch)
 4. Generates CLAUDE.md with worktree context (task name, working directory, project root)
 5. Symlinks non-git items into the task directory (multi-repo only)
-6. Executes `.worktreerc` `post_create()` hook if present
-7. Auto-installs dependencies based on lock files (unless `--no-install`)
+6. Copies `mise.toml` / `mise.local.toml` into each worktree (inherits mise version pinning even when gitignored)
+7. Executes `.worktreerc` `post_create()` hook if present
+8. Auto-installs dependencies based on lock files (unless `--no-install`)
 
 ## Worktree layout
 

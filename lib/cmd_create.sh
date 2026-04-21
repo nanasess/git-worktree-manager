@@ -207,6 +207,23 @@ cmd_create() {
         fi
     fi
 
+    # Copy mise config files (mise.toml, mise.local.toml) for each created worktree.
+    # This inherits mise version pinning even when the config is gitignored.
+    if [ ${#created_repos[@]} -gt 0 ]; then
+        log_info "Copying mise config files..."
+        for repo in "${created_repos[@]}"; do
+            local repo_src repo_dst
+            if [ "$repo" = "." ]; then
+                repo_src="$project_root"
+                repo_dst="$task_dir"
+            else
+                repo_src="${project_root}/${repo}"
+                repo_dst="${task_dir}/${repo}"
+            fi
+            copy_mise_configs "$repo_src" "$repo_dst"
+        done
+    fi
+
     # Execute .worktreerc hook
     local worktreerc="${project_root}/.worktreerc"
     if [ -f "$worktreerc" ]; then
