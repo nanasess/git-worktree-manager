@@ -101,3 +101,56 @@ teardown_file() {
 
     [ ! -d "${WORKTREES_DIR}/feature/slash-test" ]
 }
+
+# URL-based checkout
+@test "checkout: invalid URL fails cleanly" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://gitlab.com/foo/bar/issues/1
+    assert_failure
+    assert_output --partial "Invalid GitHub URL"
+}
+
+@test "checkout: issue URL creates issue-<N> worktree" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/issues/2 --no-install
+    assert_success
+
+    [ -d "${WORKTREES_DIR}/issue-2" ]
+    [ -f "${WORKTREES_DIR}/issue-2/.git" ]
+    git -C "$SINGLE_REPO_DIR" rev-parse --verify issue-2
+}
+
+@test "cleanup: removes issue-<N> worktree" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup issue-2 --force --delete-branches
+    assert_success
+
+    [ ! -d "${WORKTREES_DIR}/issue-2" ]
+}
+
+@test "checkout: PR URL creates pr-<N> worktree on PR branch" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/pull/443 --no-install
+    assert_success
+
+    [ -d "${WORKTREES_DIR}/pr-443" ]
+    [ -f "${WORKTREES_DIR}/pr-443/.git" ]
+    # Branch name should be the PR's head ref (not "pr-443")
+    local worktree_branch
+    worktree_branch=$(git -C "${WORKTREES_DIR}/pr-443" branch --show-current)
+    [ "$worktree_branch" = "dependabot/npm_and_yarn/handlebars-4.7.9" ]
+}
+
+@test "checkout: PR URL with non-matching repo fails" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://github.com/some/other-repo/pull/1 --no-install
+    assert_failure
+}
+
+@test "cleanup: removes pr-<N> worktree" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup pr-443 --force --delete-branches
+    assert_success
+
+    [ ! -d "${WORKTREES_DIR}/pr-443" ]
+}

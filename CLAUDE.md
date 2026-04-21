@@ -20,9 +20,16 @@ worktree list
 worktree cleanup <task-name> [--force] [--delete-branches]
 worktree cleanup --merged [--force] [--delete-branches] [--dry-run]
 worktree checkout [branch]
+worktree checkout <issue-or-pr-URL> [--no-install]
 worktree pull
 worktree install --skills [--global]
 ```
+
+`worktree checkout <URL>` は GitHub の Issue/PR URL を受け付け、
+- Issue URL: `issue-<N>` というタスク名で worktree とブランチを作成
+- PR URL: `pr-<N>` というタスクディレクトリに、PR の head ブランチ名そのままのローカルブランチで worktree を作成
+- マルチリポの場合、PR URL は URL に一致する単一リポの worktree のみ作成
+- `gh` CLI はオプション: 無ければ Issue 検証をスキップし、PR はブランチ名を `pr-<N>` にフォールバック
 
 すべてのコマンドはプロジェクトルートまたは `.worktrees/` ディレクトリ内から実行可能。
 
