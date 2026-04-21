@@ -4,25 +4,369 @@
 #
 
 cmd_checkout_usage() {
-    echo -e "${BOLD}worktree checkout${NC} - Checkout a branch on all repositories"
+    echo -e "${BOLD}worktree checkout${NC} - Checkout a branch, or create a worktree from a GitHub URL"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
-    echo "    worktree checkout [BRANCH] [OPTIONS]"
+    echo "    worktree checkout [BRANCH|URL] [OPTIONS]"
     echo ""
     echo -e "${BOLD}ARGUMENTS:${NC}"
     echo "    BRANCH    Branch to checkout (default: each repo's default branch)"
+    echo "    URL       GitHub issue or PR URL — creates a worktree for it"
+    echo "              https://github.com/<owner>/<repo>/issues/<number>"
+    echo "              https://github.com/<owner>/<repo>/pull/<number>"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
+    echo "    --no-install  (URL mode) Skip automatic dependency installation"
     echo "    -h, --help    Show help"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
-    echo "    cd ~/git-repos/EcAuth && worktree checkout"
-    echo "    cd ~/git-repos/EcAuth && worktree checkout main"
-    echo "    cd ~/git-repos/EcAuth && worktree checkout develop"
+    echo "    worktree checkout                                              # default branch"
+    echo "    worktree checkout develop                                      # specific branch"
+    echo "    worktree checkout https://github.com/owner/repo/issues/42      # issue worktree"
+    echo "    worktree checkout https://github.com/owner/repo/pull/123       # PR worktree"
+}
+
+# Parse a GitHub issue or PR URL.
+# Stdout on success: "<owner> <repo> <kind> <number>" (kind: issues|pull)
+# Returns 1 on no match.
+parse_github_url() {
+    local url="$1"
+    local re='^https://github\.com/([^/]+)/([^/]+)/(issues|pull)/([0-9]+)(/.*)?$'
+    if [[ "$url" =~ $re ]]; then
+        echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]} ${BASH_REMATCH[4]}"
+        return 0
+    fi
+    return 1
+}
+
+# Parse a git remote URL to extract the GitHub owner/repo pair.
+# Handles https://, http://, ssh://, git://, and SSH shortcut (git@host:owner/repo).
+# Also tolerates an explicit port number (e.g., github.com:443/owner/repo).
+# Stdout on success: "<owner> <repo>". Returns 1 if the URL is not a github.com URL.
+parse_github_remote_url() {
+    local url="$1"
+    # Normalize: strip trailing slash and .git suffix
+    url="${url%/}"
+    url="${url%.git}"
+
+    # Only consider github.com remotes
+    case "$url" in
+        *github.com*) ;;
+        *) return 1 ;;
+    esac
+
+    # Take everything after the last occurrence of "github.com"
+    local tail="${url##*github.com}"
+    # Strip a leading port specifier like ":443" or ":22" if present
+    if [[ "$tail" =~ ^:[0-9]+(.*)$ ]]; then
+        tail="${BASH_REMATCH[1]}"
+    fi
+    # Strip the single leading separator (":" for SSH shortcut, "/" for HTTPS/ssh://)
+    tail="${tail#[:/]}"
+
+    # Expect "owner/repo" with no further slashes
+    if [[ "$tail" =~ ^([^/]+)/([^/]+)$ ]]; then
+        echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+        return 0
+    fi
+    return 1
+}
+
+# Find the sub-repository in the current project whose remote URL matches
+# <owner>/<repo>. Checks every configured remote (not just origin), so fork
+# setups with origin=fork and upstream=canonical work correctly.
+# Stdout on success: "<repo_name> <remote_name>" (repo_name is "." for single repo).
+# Returns 1 if no remote matches.
+find_repo_by_remote() {
+    local owner="$1"
+    local repo="$2"
+    local project_root="$3"
+
+    local repos_str
+    repos_str="$(list_git_repos)"
+    read -ra repos <<< "$repos_str"
+
+    for r in "${repos[@]}"; do
+        local path="$project_root"
+        [ "$r" != "." ] && path="${project_root}/${r}"
+        local remotes
+        remotes="$(git -C "$path" remote 2>/dev/null)" || continue
+        # Prefer origin when it matches so the output remains stable for common
+        # setups; then check remaining remotes for fork/upstream configurations.
+        local ordered_remotes=""
+        if echo "$remotes" | grep -qx "origin"; then
+            ordered_remotes+=$'origin\n'
+        fi
+        ordered_remotes+="$(echo "$remotes" | grep -vx "origin" || true)"
+        while IFS= read -r remote_name; do
+            [ -z "$remote_name" ] && continue
+            local url
+            url="$(git -C "$path" remote get-url "$remote_name" 2>/dev/null)" || continue
+            local parsed
+            parsed="$(parse_github_remote_url "$url")" || continue
+            local o rname
+            read -r o rname <<< "$parsed"
+            if [ "$o" = "$owner" ] && [ "$rname" = "$repo" ]; then
+                echo "$r $remote_name"
+                return 0
+            fi
+        done <<< "$ordered_remotes"
+    done
+    return 1
+}
+
+# Dispatch URL-mode checkout.
+# $1: url, remaining args: passthrough options for cmd_create (e.g., --no-install)
+cmd_checkout_url() {
+    local url="$1"
+    shift
+
+    local parsed
+    parsed="$(parse_github_url "$url")" || {
+        log_error "Invalid GitHub URL: $url"
+        log_error "Expected: https://github.com/<owner>/<repo>/(issues|pull)/<number>"
+        return 1
+    }
+    local owner repo kind number
+    read -r owner repo kind number <<< "$parsed"
+
+    case "$kind" in
+        issues) cmd_checkout_issue "$owner" "$repo" "$number" "$@" ;;
+        pull)   cmd_checkout_pr "$owner" "$repo" "$number" "$@" ;;
+    esac
+}
+
+cmd_checkout_issue() {
+    local owner="$1"
+    local repo="$2"
+    local number="$3"
+    shift 3
+
+    if command -v gh >/dev/null 2>&1; then
+        log_info "Verifying issue #${number} in ${owner}/${repo}..."
+        if ! gh issue view "$number" --repo "${owner}/${repo}" --json number >/dev/null 2>&1; then
+            log_warn "gh could not verify the issue (missing auth or network issue) — proceeding without verification"
+        fi
+    else
+        log_warn "gh CLI not found — skipping issue verification"
+    fi
+
+    local task_name="issue-${number}"
+    log_info "Creating worktree for issue #${number} (task: ${task_name})"
+    cmd_create "$task_name" "$@"
+}
+
+cmd_checkout_pr() {
+    local owner="$1"
+    local repo="$2"
+    local pr_number="$3"
+    shift 3
+
+    # Parse passthrough options
+    local no_install=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --no-install) no_install=true ;;
+            --branch-prefix)
+                # Ignored for PR mode: the branch name comes from the PR head.
+                # Consume the value too, but guard against it being missing.
+                if [ $# -ge 2 ]; then
+                    shift
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    local head_ref=""
+    if command -v gh >/dev/null 2>&1; then
+        log_info "Fetching PR #${pr_number} info from ${owner}/${repo}..."
+        head_ref="$(gh pr view "$pr_number" --repo "${owner}/${repo}" --json headRefName --jq .headRefName 2>/dev/null || true)"
+    fi
+    if [ -z "$head_ref" ]; then
+        head_ref="pr-${pr_number}"
+        log_warn "gh unavailable or unable to query the PR — using fallback branch name '${head_ref}'"
+    fi
+
+    local project_root project_name
+    project_root="$(get_project_root)"
+    project_name="$(get_project_name)"
+
+    local match
+    match="$(find_repo_by_remote "$owner" "$repo" "$project_root")" || {
+        log_error "No repository in ${project_root} matches ${owner}/${repo}"
+        log_error "Run 'worktree checkout' from a project whose clone points at ${owner}/${repo}"
+        return 1
+    }
+    local matching_repo matching_remote
+    read -r matching_repo matching_remote <<< "$match"
+
+    local task_name="pr-${pr_number}"
+    local task_dir
+    task_dir="$(get_task_dir "$task_name")"
+
+    local matching_repo_path="$project_root"
+    [ "$matching_repo" != "." ] && matching_repo_path="${project_root}/${matching_repo}"
+
+    local matching_repo_display="$matching_repo"
+    [ "$matching_repo" = "." ] && matching_repo_display="$project_name"
+
+    echo ""
+    echo "============================================"
+    echo -e " ${BOLD}worktree checkout${NC}: PR #${pr_number}"
+    echo "============================================"
+    echo ""
+    log_info "Project: ${project_name} (${project_root})"
+    log_info "PR: ${owner}/${repo}#${pr_number}"
+    log_info "PR branch: ${head_ref}"
+    log_info "Target repo: ${matching_repo_display} (remote: ${matching_remote})"
+    log_info "Task directory: ${task_dir}"
+    echo ""
+
+    if [ -d "$task_dir" ]; then
+        log_error "Task directory already exists: ${task_dir}"
+        return 1
+    fi
+
+    # Always fetch the PR head fresh into a non-branch ref so we don't touch
+    # the user's existing local branches until we've decided a safe name.
+    # Fetch from the remote that actually points at the PR's repository
+    # (which may be "upstream" in fork workflows, not "origin").
+    local pr_fetch_ref="refs/pr-fetch/${pr_number}"
+    log_info "Fetching PR #${pr_number} head from ${matching_remote}..."
+    if ! git -C "$matching_repo_path" fetch "$matching_remote" "+pull/${pr_number}/head:${pr_fetch_ref}" 2>&1; then
+        log_error "Failed to fetch PR #${pr_number}"
+        return 1
+    fi
+
+    # Decide the local branch name. Prefer the PR head ref, but fall back to
+    # "pr-<N>" when the head ref collides with protected/existing branches.
+    local local_branch="$head_ref"
+    local fallback_name="pr-${pr_number}"
+    local fallback_reason=""
+
+    if [ "$local_branch" != "$fallback_name" ]; then
+        local default_branch current_branch
+        default_branch="$(detect_default_branch "$matching_repo_path" 2>/dev/null || true)"
+        current_branch="$(git -C "$matching_repo_path" branch --show-current 2>/dev/null || true)"
+
+        if [[ "$local_branch" = main \
+              || "$local_branch" = master \
+              || "$local_branch" = develop \
+              || "$local_branch" = "$default_branch" \
+              || "$local_branch" = "$current_branch" ]]; then
+            fallback_reason="collides with a protected/default/current branch"
+        elif git -C "$matching_repo_path" rev-parse --verify "refs/heads/${local_branch}" >/dev/null 2>&1; then
+            # Existing local branch. Only keep the name if its tip is an ancestor
+            # of (or equal to) the PR head — otherwise the user's branch has
+            # unrelated work we must not overwrite.
+            local existing_tip pr_head_tip
+            existing_tip="$(git -C "$matching_repo_path" rev-parse "refs/heads/${local_branch}")"
+            pr_head_tip="$(git -C "$matching_repo_path" rev-parse "$pr_fetch_ref")"
+            if [ "$existing_tip" != "$pr_head_tip" ] \
+               && ! git -C "$matching_repo_path" merge-base --is-ancestor "$existing_tip" "$pr_head_tip" 2>/dev/null; then
+                fallback_reason="local branch '${local_branch}' has unrelated commits"
+            fi
+        fi
+
+        if [ -n "$fallback_reason" ]; then
+            log_warn "Using fallback branch name '${fallback_name}' (${fallback_reason})"
+            local_branch="$fallback_name"
+        fi
+    fi
+
+    # Force-set the chosen local branch to the freshly fetched PR head.
+    if ! git -C "$matching_repo_path" branch -f "$local_branch" "$pr_fetch_ref" 2>&1; then
+        log_error "Failed to set local branch '${local_branch}' (checked out elsewhere?)"
+        return 1
+    fi
+
+    # Determine worktree path
+    local worktree_path
+    if [ "$matching_repo" = "." ]; then
+        worktree_path="$task_dir"
+    else
+        mkdir -p "$task_dir"
+        worktree_path="${task_dir}/${matching_repo}"
+    fi
+
+    log_info "Creating worktree at ${worktree_path} (branch: ${local_branch})..."
+    if ! git -C "$matching_repo_path" worktree add "$worktree_path" "$local_branch" 2>&1; then
+        log_error "Failed to create worktree"
+        return 1
+    fi
+    log_success "Created worktree: ${worktree_path}"
+
+    # Symlinks (multi-repo) and CLAUDE.md with worktree context
+    if [ "$matching_repo" != "." ]; then
+        log_info "Creating symlinks..."
+        local items_str
+        items_str="$(list_non_git_items)"
+        if [ -n "$items_str" ]; then
+            read -ra items <<< "$items_str"
+            for item in "${items[@]}"; do
+                local src="${project_root}/${item}"
+                local dst="${task_dir}/${item}"
+                [ -e "$dst" ] && continue
+                if [ "$item" = "CLAUDE.md" ]; then
+                    generate_worktree_claude_md "$src" "$dst" "$task_name" "$task_dir" "$project_root"
+                    log_info "  ${item} -> generated (with worktree context)"
+                else
+                    ln -sf "$src" "$dst"
+                    log_info "  ${item} -> ${src}"
+                fi
+            done
+        fi
+    else
+        local claude_md_src="${project_root}/CLAUDE.md"
+        if [ -f "$claude_md_src" ]; then
+            local claude_md_dst="${task_dir}/CLAUDE.md"
+            generate_worktree_claude_md "$claude_md_src" "$claude_md_dst" "$task_name" "$task_dir" "$project_root"
+            log_info "  CLAUDE.md -> generated (with worktree context)"
+        fi
+    fi
+
+    # .worktreerc hook
+    local worktreerc="${project_root}/.worktreerc"
+    if [ -f "$worktreerc" ]; then
+        echo ""
+        log_info "Executing .worktreerc hook..."
+        (
+            export WORKTREE_TASK_NAME="$task_name"
+            export WORKTREE_TASK_DIR="$task_dir"
+            export WORKTREE_PROJECT_ROOT="$project_root"
+            cd "$task_dir"
+            source "$worktreerc"
+            if type post_create &>/dev/null; then
+                post_create
+                log_success "post_create hook executed"
+            fi
+        )
+    fi
+
+    # Dependency installation
+    if [ "$no_install" = false ]; then
+        local deps_type
+        deps_type="$(detect_deps_type "$worktree_path")"
+        if [ -n "$deps_type" ]; then
+            echo ""
+            log_info "Installing dependencies..."
+            log_info "${matching_repo_display} (${deps_type}):"
+            install_deps "$worktree_path" || true
+        fi
+    else
+        echo ""
+        log_info "Skipped dependency installation (--no-install)"
+    fi
+
+    echo ""
+    log_success "PR #${pr_number} (${head_ref}) checked out at ${worktree_path}"
+    echo ""
 }
 
 cmd_checkout() {
-    local branch=""
+    local arg=""
+    local -a passthrough=()
 
     # Parse options
     while [ $# -gt 0 ]; do
@@ -31,14 +375,26 @@ cmd_checkout() {
                 cmd_checkout_usage
                 return 0
                 ;;
+            --no-install)
+                passthrough+=("$1")
+                ;;
+            --branch-prefix)
+                if [ $# -lt 2 ]; then
+                    log_error "--branch-prefix requires a value"
+                    cmd_checkout_usage
+                    return 1
+                fi
+                shift
+                passthrough+=("--branch-prefix" "$1")
+                ;;
             -*)
                 log_error "Unknown option: $1"
                 cmd_checkout_usage
                 return 1
                 ;;
             *)
-                if [ -z "$branch" ]; then
-                    branch="$1"
+                if [ -z "$arg" ]; then
+                    arg="$1"
                 else
                     log_error "Unknown argument: $1"
                     cmd_checkout_usage
@@ -48,6 +404,21 @@ cmd_checkout() {
         esac
         shift
     done
+
+    # URL mode: dispatch to issue/PR handler (passthrough options go to cmd_create)
+    if [[ "$arg" =~ ^https?:// ]]; then
+        cmd_checkout_url "$arg" "${passthrough[@]}"
+        return $?
+    fi
+
+    if [ ${#passthrough[@]} -gt 0 ]; then
+        log_error "Options ${passthrough[*]} are only valid with a GitHub URL"
+        cmd_checkout_usage
+        return 1
+    fi
+
+    # Branch mode: existing behavior — checkout a branch on all repos
+    local branch="$arg"
 
     local project_root
     project_root="$(get_project_root)"

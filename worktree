@@ -33,7 +33,7 @@ usage() {
     echo "    create <task-name>    Create worktrees for a task"
     echo "    list                  List current worktrees"
     echo "    cleanup [task-name]   Remove worktrees"
-    echo "    checkout [branch]     Checkout a branch on all repositories"
+    echo "    checkout [branch|URL] Checkout a branch, or create a worktree from issue/PR URL"
     echo "    pull                  Pull all repositories"
     echo "    install --skills      Install Claude Code skills"
     echo ""

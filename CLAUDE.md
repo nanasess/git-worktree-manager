@@ -20,9 +20,16 @@ worktree list
 worktree cleanup <task-name> [--force] [--delete-branches]
 worktree cleanup --merged [--force] [--delete-branches] [--dry-run]
 worktree checkout [branch]
+worktree checkout <issue-or-pr-URL> [--no-install]
 worktree pull
 worktree install --skills [--global]
 ```
+
+`worktree checkout <URL>` は GitHub の Issue/PR URL を受け付け、
+- Issue URL: `issue-<N>` というタスク名で worktree とブランチを作成
+- PR URL: `pr-<N>` というタスクディレクトリに、PR の head ブランチ名そのままのローカルブランチで worktree を作成
+- マルチリポの場合、PR URL は URL に一致する単一リポの worktree のみ作成
+- `gh` CLI はオプション: 無ければ Issue 検証をスキップし、PR はブランチ名を `pr-<N>` にフォールバック
 
 すべてのコマンドはプロジェクトルートまたは `.worktrees/` ディレクトリ内から実行可能。
 
@@ -54,6 +61,11 @@ bats-core を使用（git submodule として管理）。
 git submodule update --init --recursive
 ./test/bats/bin/bats test/*.bats
 ```
+
+### テストファイルの役割
+
+- `test/single_repo.bats` / `test/multi_repo.bats`: 外部リポを clone して URL 解析・fallback・衝突検出などを検証。`gh` 認証は必須ではない（CI の `GITHUB_TOKEN` は外部リポにアクセスできないため fallback 経路を検証）。
+- `test/self_repo_smoke.bats`: 本リポの PR/Issue URL を使って `gh` 成功時のパス（head_ref 保持・worktree マッチング）を smoke test。CI では `GITHUB_TOKEN` が本リポ自身へアクセスできるので PAT 不要。`gh` が使えない環境では各テストが skip される。
 
 ## コマンド追加・修正時のチェックリスト
 

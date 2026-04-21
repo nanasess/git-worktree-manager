@@ -29,6 +29,11 @@ cmd_create() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --branch-prefix)
+                if [ $# -lt 2 ]; then
+                    log_error "--branch-prefix requires a value"
+                    cmd_create_usage
+                    return 1
+                fi
                 shift
                 branch_prefix="$1"
                 ;;

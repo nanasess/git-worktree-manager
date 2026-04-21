@@ -97,11 +97,11 @@ cmd_install() {
         log_success "${installed} skill(s) installed"
         echo ""
         echo "Available skills:"
-        echo "  /worktree-create <task-name>   Create worktrees"
-        echo "  /worktree-list                 List worktrees"
-        echo "  /worktree-cleanup <task-name>  Cleanup worktrees"
-        echo "  /worktree-checkout [branch]    Checkout a branch on all repos"
-        echo "  /worktree-pull                 Pull all repos"
+        echo "  /worktree-create <task-name>      Create worktrees"
+        echo "  /worktree-list                    List worktrees"
+        echo "  /worktree-cleanup <task-name>     Cleanup worktrees"
+        echo "  /worktree-checkout [branch|URL]   Checkout a branch or create worktree from GitHub URL"
+        echo "  /worktree-pull                    Pull all repos"
     else
         log_warn "No skills available to install"
     fi

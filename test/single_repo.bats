@@ -125,3 +125,130 @@ teardown_file() {
     [ ! -d "${WORKTREES_DIR}/mise-task" ]
     rm -f "${SINGLE_REPO_DIR}/mise.toml" "${SINGLE_REPO_DIR}/mise.local.toml"
 }
+
+# URL-based checkout
+@test "checkout: invalid URL fails cleanly" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://gitlab.com/foo/bar/issues/1
+    assert_failure
+    assert_output --partial "Invalid GitHub URL"
+}
+
+@test "checkout: --branch-prefix without value fails cleanly" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/issues/2 --branch-prefix
+    assert_failure
+    assert_output --partial "--branch-prefix requires a value"
+}
+
+@test "create: --branch-prefix without value fails cleanly" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" create some-task --branch-prefix
+    assert_failure
+    assert_output --partial "--branch-prefix requires a value"
+}
+
+@test "checkout: issue URL creates issue-<N> worktree" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/issues/2 --no-install
+    assert_success
+
+    [ -d "${WORKTREES_DIR}/issue-2" ]
+    [ -f "${WORKTREES_DIR}/issue-2/.git" ]
+    git -C "$SINGLE_REPO_DIR" rev-parse --verify issue-2
+}
+
+@test "cleanup: removes issue-<N> worktree" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup issue-2 --force --delete-branches
+    assert_success
+
+    [ ! -d "${WORKTREES_DIR}/issue-2" ]
+}
+
+@test "checkout: PR URL creates pr-<N> worktree on PR branch" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/pull/443 --no-install
+    assert_success
+
+    [ -d "${WORKTREES_DIR}/pr-443" ]
+    [ -f "${WORKTREES_DIR}/pr-443/.git" ]
+    # Worktree must be on a named branch (not detached HEAD).
+    # Branch name depends on gh availability:
+    #   - With gh auth: the PR's original head ref (e.g., dependabot/...)
+    #   - Without gh (or gh unable to query): fallback "pr-443"
+    local worktree_branch
+    worktree_branch=$(git -C "${WORKTREES_DIR}/pr-443" branch --show-current)
+    [ -n "$worktree_branch" ]
+}
+
+@test "checkout: PR URL with non-matching repo fails" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://github.com/some/other-repo/pull/1 --no-install
+    assert_failure
+}
+
+@test "cleanup: removes pr-<N> worktree" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup pr-443 --force --delete-branches
+    assert_success
+
+    [ ! -d "${WORKTREES_DIR}/pr-443" ]
+}
+
+# Regression: stale local branch with PR head ref name must not be reused
+@test "checkout: unrelated local branch with same name falls back to pr-<N>" {
+    cd "$SINGLE_REPO_DIR"
+    # Pre-create a local branch named after the PR's head ref, pointing at
+    # an unrelated commit (master tip, which is NOT the PR head).
+    local pr_head_name="dependabot/npm_and_yarn/handlebars-4.7.9"
+    git branch "$pr_head_name" master
+
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/pull/443 --no-install
+    assert_success
+
+    # Must have used the fallback name, not reused the stale branch
+    local worktree_branch
+    worktree_branch=$(git -C "${WORKTREES_DIR}/pr-443" branch --show-current)
+    [ "$worktree_branch" = "pr-443" ]
+
+    # Worktree must point at the PR head, not the stale local branch
+    local worktree_sha stale_sha
+    worktree_sha=$(git -C "${WORKTREES_DIR}/pr-443" rev-parse HEAD)
+    stale_sha=$(git -C "$SINGLE_REPO_DIR" rev-parse master)
+    [ "$worktree_sha" != "$stale_sha" ]
+}
+
+@test "cleanup: removes fallback pr-<N> worktree" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup pr-443 --force --delete-branches
+    assert_success
+    [ ! -d "${WORKTREES_DIR}/pr-443" ]
+    # Clean up the stale branch that we created for the regression test
+    git -C "$SINGLE_REPO_DIR" branch -D "dependabot/npm_and_yarn/handlebars-4.7.9" 2>/dev/null || true
+}
+
+# Fork workflow: origin points at a fork, upstream points at the canonical repo.
+# The URL targets the canonical repo, so the match must come from 'upstream'
+# and the subsequent PR fetch must also use 'upstream'.
+@test "checkout: PR URL matches a non-origin remote (upstream)" {
+    cd "$SINGLE_REPO_DIR"
+    git -C "$SINGLE_REPO_DIR" remote set-url origin "https://github.com/fork-owner/setup-chromedriver.git"
+    git -C "$SINGLE_REPO_DIR" remote add upstream "https://github.com/nanasess/setup-chromedriver.git"
+
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/pull/443 --no-install
+    assert_success
+    assert_output --partial "remote: upstream"
+
+    [ -d "${WORKTREES_DIR}/pr-443" ]
+    [ -f "${WORKTREES_DIR}/pr-443/.git" ]
+}
+
+@test "cleanup: removes upstream-matched PR worktree and restores remotes" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup pr-443 --force --delete-branches
+    assert_success
+    # Restore remote configuration for subsequent tests (if any)
+    git -C "$SINGLE_REPO_DIR" remote remove upstream 2>/dev/null || true
+    git -C "$SINGLE_REPO_DIR" remote set-url origin "https://github.com/nanasess/setup-chromedriver.git"
+}

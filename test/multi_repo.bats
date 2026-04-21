@@ -123,3 +123,31 @@ teardown_file() {
         rm -f "${MULTI_REPO_DIR}/${repo}/mise.local.toml"
     done
 }
+
+# URL-based checkout (PR scoped to one repo)
+@test "checkout: PR URL creates worktree only for matching repo" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://github.com/EcAuth/EcAuth/pull/1 --no-install
+    assert_success
+
+    [ -d "${WORKTREES_DIR}/pr-1" ]
+    [ -d "${WORKTREES_DIR}/pr-1/EcAuth" ]
+    [ -f "${WORKTREES_DIR}/pr-1/EcAuth/.git" ]
+    # Non-matching repos should NOT have a worktree under pr-1/
+    [ ! -d "${WORKTREES_DIR}/pr-1/ecauth-website" ]
+    [ ! -d "${WORKTREES_DIR}/pr-1/ecauth-auth-js" ]
+}
+
+@test "checkout: PR URL with no matching repo fails" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" checkout https://github.com/some/unrelated/pull/1 --no-install
+    assert_failure
+}
+
+@test "cleanup: removes PR worktree" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup pr-1 --force --delete-branches
+    assert_success
+
+    [ ! -d "${WORKTREES_DIR}/pr-1" ]
+}

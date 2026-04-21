@@ -101,13 +101,30 @@ worktree list    # or: worktree ls
 
 Shows all tasks with branch names, modification status, and untracked files.
 
-### `worktree checkout [branch]`
+### `worktree checkout [branch|URL]`
 
 ```bash
-worktree checkout           # default branch
-worktree checkout develop   # specific branch
+worktree checkout           # default branch on all repos
+worktree checkout develop   # specific branch on all repos
 worktree co main            # alias
+
+# Create a worktree from a GitHub issue or PR URL
+worktree checkout https://github.com/owner/repo/issues/42
+worktree checkout https://github.com/owner/repo/pull/123
 ```
+
+When given a branch, switches each repo's HEAD to that branch.
+
+When given a **GitHub URL**, creates a worktree scoped to that issue/PR:
+
+| URL type | Task dir | Branch behavior |
+|---|---|---|
+| `issues/<N>` | `issue-<N>` | Creates a new branch `issue-<N>` from default |
+| `pull/<N>` | `pr-<N>` | Fetches the PR head and checks it out under its **original branch name** |
+
+For PR URLs in multi-repo projects, only the repository matching the URL gets a worktree (the PR is scoped to one repo).
+
+The [`gh` CLI](https://cli.github.com/) is optional: with `gh`, PR URLs use the PR's original head branch name; without it, a generic `pr-<N>` branch name is used.
 
 ### `worktree pull`
 
