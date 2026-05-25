@@ -101,6 +101,16 @@ worktree list    # or: worktree ls
 
 Shows all tasks with branch names, modification status, and untracked files.
 
+Each repository line may carry status labels:
+
+| Label | Meaning |
+|---|---|
+| `[modified]` | The working tree or index has uncommitted changes |
+| `[untracked]` | One or more files are not tracked by git |
+| `[merged]` | The branch corresponds to a merged GitHub PR (detected via `gh pr list --state merged`, so squash/rebase merges are caught) |
+
+The `[merged]` label requires the [`gh` CLI](https://cli.github.com/) to be installed and authenticated against the remote; it is silently skipped when `gh` is missing, the remote is not GitHub, or the API call fails.
+
 ### `worktree checkout [branch|URL]`
 
 ```bash

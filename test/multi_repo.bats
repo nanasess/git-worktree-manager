@@ -185,3 +185,27 @@ teardown_file() {
     git -C "${MULTI_REPO_DIR}/ecauth-website" branch -D broken-task 2>/dev/null || true
     git -C "${MULTI_REPO_DIR}/ecauth-auth-js" branch -D broken-task 2>/dev/null || true
 }
+
+# Regression: a task containing a broken sub-repo must still be removable
+# under `cleanup --force`. Without the fix the broken sub-repo causes
+# `set -euo pipefail` to abort cleanup_task before reaching the other repos.
+@test "cleanup --force: removes task with a broken sub-repo" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" create broken-cleanup --no-install
+    assert_success
+
+    # Stale gitdir pointer (the main repo path is fine; only the per-worktree
+    # gitdir entry is missing) — mirrors `git worktree remove` being
+    # impossible without falling back to direct removal.
+    echo "gitdir: /nonexistent/per-worktree/gitdir" \
+        > "${WORKTREES_DIR}/broken-cleanup/EcAuth/.git"
+
+    run "$WORKTREE_CMD" cleanup broken-cleanup --force --delete-branches
+    assert_success
+    assert_output --partial "broken worktree"
+    [ ! -d "${WORKTREES_DIR}/broken-cleanup" ]
+
+    # Tidy: registries on the other repos still reference the removed paths.
+    git -C "${MULTI_REPO_DIR}/EcAuth" worktree prune
+    git -C "${MULTI_REPO_DIR}/EcAuth" branch -D broken-cleanup 2>/dev/null || true
+}
