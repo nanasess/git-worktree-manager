@@ -3,6 +3,54 @@
 # cmd_list.sh - list subcommand
 #
 
+# Detect whether <branch> in <repo_dir> corresponds to a merged GitHub PR.
+# Uses `gh pr list --state merged` so squash/rebase merges are caught too.
+# Returns 0 if merged, 1 otherwise (incl. gh unavailable, non-GitHub remote,
+# auth/network errors, or no matching PR). All failures are silent so the
+# list output stays clean.
+#
+# parse_github_remote_url is defined in cmd_checkout.sh; both libraries are
+# sourced by the worktree entrypoint, so cross-module calls are safe.
+is_branch_merged_via_gh() {
+    local repo_dir="$1"
+    local branch="$2"
+
+    [ -z "$branch" ] && return 1
+    command -v gh >/dev/null 2>&1 || return 1
+
+    local remotes
+    remotes="$(git -C "$repo_dir" remote 2>/dev/null)" || return 1
+    [ -z "$remotes" ] && return 1
+
+    # Prefer origin, then fall back to other remotes (fork/upstream setups).
+    local ordered_remotes=""
+    if echo "$remotes" | grep -qx "origin"; then
+        ordered_remotes+=$'origin\n'
+    fi
+    ordered_remotes+="$(echo "$remotes" | grep -vx "origin" || true)"
+
+    local owner="" repo=""
+    while IFS= read -r remote_name; do
+        [ -z "$remote_name" ] && continue
+        local url
+        url="$(git -C "$repo_dir" remote get-url "$remote_name" 2>/dev/null)" || continue
+        local parsed
+        parsed="$(parse_github_remote_url "$url" 2>/dev/null)" || continue
+        read -r owner repo <<< "$parsed"
+        break
+    done <<< "$ordered_remotes"
+
+    [ -z "$owner" ] || [ -z "$repo" ] && return 1
+
+    # `gh pr list --head` does not support "<owner>:<branch>" syntax, so we
+    # match by branch name alone. False positives from same-name fork PRs are
+    # possible in theory but rare in practice.
+    local count
+    count="$(gh pr list --repo "${owner}/${repo}" --state merged \
+        --head "$branch" --json number --jq 'length' --limit 1 2>/dev/null)" || return 1
+    [ -n "$count" ] && [ "$count" -gt 0 ] 2>/dev/null
+}
+
 cmd_list_usage() {
     echo -e "${BOLD}worktree list${NC} - List current worktrees"
     echo ""
@@ -133,6 +181,12 @@ cmd_list() {
                 fi
                 if [ -n "$untracked" ]; then
                     status_icon="${status_icon} ${YELLOW}[untracked]${NC}"
+                fi
+
+                # PR-based merged check: catches squash/rebase merges too.
+                # Silently no-ops when gh is missing or the remote is not GitHub.
+                if is_branch_merged_via_gh "$repo_dir" "$branch"; then
+                    status_icon="${status_icon} ${GREEN}[merged]${NC}"
                 fi
 
                 echo -e "    ${repo_name}: ${GREEN}${branch}${NC}${status_icon}"

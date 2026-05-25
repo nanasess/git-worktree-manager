@@ -68,6 +68,18 @@ require_gh_for_self_repo() {
     [ "$branch" = "$SELF_PR_HEAD_REF" ]
 }
 
+@test "list: shows [merged] for self-repo PR worktree" {
+    require_gh_for_self_repo
+
+    # Depends on the previous test having created pr-${SELF_PR_NUMBER}.
+    [ -d "${WORKTREES_DIR}/pr-${SELF_PR_NUMBER}/git-worktree-manager" ]
+
+    cd "$PROJECT_DIR"
+    run "$WORKTREE_CMD" list
+    assert_success
+    assert_output --partial "[merged]"
+}
+
 @test "cleanup: removes self-repo PR worktree" {
     require_gh_for_self_repo
 
