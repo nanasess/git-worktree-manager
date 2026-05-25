@@ -8,6 +8,7 @@ cmd_cleanup_usage() {
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
     echo "    worktree cleanup [task-name] [OPTIONS]"
+    echo "    <task-name-source> | worktree cleanup [OPTIONS]"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
     echo "    --merged              Auto-detect and remove merged tasks"
@@ -23,6 +24,7 @@ cmd_cleanup_usage() {
     echo "    worktree cleanup feature-login --force --delete-branches"
     echo "    worktree cleanup --merged --dry-run"
     echo "    worktree cleanup --merged --force --delete-branches"
+    echo "    worktree list --merged --names-only | worktree cleanup --force"
 }
 
 cmd_cleanup() {
@@ -107,8 +109,28 @@ cmd_cleanup() {
             log_info "No merged tasks found"
             return 0
         fi
+    elif [ ! -t 0 ]; then
+        # No task name and stdin is a pipe / redirect: read task names from it.
+        # This enables `worktree list --merged --names-only | worktree cleanup`.
+        # Slash-containing names (e.g. feature/login) are supported because
+        # `read -r` preserves the line verbatim.
+        local line
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            local task_dir_check="${worktrees_base}/${line}"
+            if [ ! -d "$task_dir_check" ]; then
+                log_warn "Task not found, skipping: ${line}"
+                continue
+            fi
+            tasks_to_clean+=("$line")
+        done
+
+        if [ ${#tasks_to_clean[@]} -eq 0 ]; then
+            log_info "No tasks read from stdin"
+            return 0
+        fi
     else
-        log_error "Specify a task name or --merged"
+        log_error "Specify a task name, --merged, or pipe task names via stdin"
         cmd_cleanup_usage
         return 1
     fi

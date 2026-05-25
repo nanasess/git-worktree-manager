@@ -16,14 +16,17 @@ ln -sf ~/git-repos/git-worktree-manager/worktree ~/.local/bin/worktree
 
 ```bash
 worktree create <task-name> [--branch-prefix <prefix>] [--no-install]
-worktree list
+worktree list [--merged] [--names-only]
 worktree cleanup <task-name> [--force] [--delete-branches]
 worktree cleanup --merged [--force] [--delete-branches] [--dry-run]
+worktree cleanup [--force] [--delete-branches] < <(task-name-source)
 worktree checkout [branch]
 worktree checkout <issue-or-pr-URL> [--no-install]
 worktree pull
 worktree install --skills [--global]
 ```
+
+`worktree list --merged --names-only` の出力は `worktree cleanup` の stdin にそのままパイプ可能 (1 行 1 task name)。マージ済み worktree をまとめて削除する用途で使う。`list --merged` は any-merged (1 つでもマージ済み sub-repo を含む) 判定で、`cleanup --merged` の all-merged 判定とは仕様が異なるため、パイプ削除時は未マージ sub-repo まで巻き込んで消える点に注意。
 
 `worktree checkout <URL>` は GitHub の Issue/PR URL を受け付け、
 - Issue URL: `issue-<N>` というタスク名で worktree とブランチを作成

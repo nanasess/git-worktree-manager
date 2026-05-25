@@ -73,6 +73,30 @@ is_branch_merged_via_gh() {
     [[ "${__merged_branches_cache[$cache_key]}" == *" ${branch} "* ]]
 }
 
+# Return 0 if any sub-repo under <task_dir> has a merged head branch.
+# Used by `--merged` (any-merged semantics): unlike `cleanup --merged` which
+# requires every sub-repo to be merged, this only needs one merged sub-repo
+# for the task to surface in the filtered list.
+task_has_merged_subrepo() {
+    local task_dir="$1"
+    local repo_dirs_str
+    repo_dirs_str="$(list_task_repo_dirs "$task_dir")"
+    [ -z "$repo_dirs_str" ] && return 1
+
+    local repo_dirs
+    read -ra repo_dirs <<< "$repo_dirs_str"
+    for repo_dir in "${repo_dirs[@]}"; do
+        # Broken worktrees can't be queried for a branch.
+        git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1 || continue
+        local branch
+        branch="$(git -C "$repo_dir" branch --show-current 2>/dev/null || true)"
+        if is_branch_merged_via_gh "$repo_dir" "$branch"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 cmd_list_usage() {
     echo -e "${BOLD}worktree list${NC} - List current worktrees"
     echo ""
@@ -80,15 +104,29 @@ cmd_list_usage() {
     echo "    worktree list [OPTIONS]"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
-    echo "    -h, --help    Show help"
+    echo "    --merged       Show only tasks with at least one merged sub-repo"
+    echo "    --names-only   Print task names only (one per line, no decoration)"
+    echo "    -h, --help     Show help"
     echo ""
     echo -e "${BOLD}ALIASES:${NC}"
     echo "    worktree ls"
+    echo ""
+    echo -e "${BOLD}EXAMPLES:${NC}"
+    echo "    worktree list --merged --names-only | worktree cleanup --force"
 }
 
 cmd_list() {
+    local merged_only=false
+    local names_only=false
+
     while [ $# -gt 0 ]; do
         case "$1" in
+            --merged)
+                merged_only=true
+                ;;
+            --names-only)
+                names_only=true
+                ;;
             -h|--help)
                 cmd_list_usage
                 return 0
@@ -107,13 +145,19 @@ cmd_list() {
     local worktrees_base
     worktrees_base="$(get_worktrees_base)"
 
-    echo ""
-    echo -e "${BOLD}${project_name}${NC} worktrees"
-    echo "============================================"
+    # --names-only is the machine-readable mode: skip headers and log_info
+    # noise so the output can be piped into `worktree cleanup` cleanly.
+    if [ "$names_only" = false ]; then
+        echo ""
+        echo -e "${BOLD}${project_name}${NC} worktrees"
+        echo "============================================"
+    fi
 
     if [ ! -d "$worktrees_base" ]; then
-        log_info "No worktrees found"
-        echo ""
+        if [ "$names_only" = false ]; then
+            log_info "No worktrees found"
+            echo ""
+        fi
         return 0
     fi
 
@@ -162,12 +206,23 @@ cmd_list() {
         fi
     done < <(find "$worktrees_base" -mindepth 2 -maxdepth 6 -name ".git" -prune -print 2>/dev/null | sort)
 
-    if [ ${#task_names[@]} -eq 0 ]; then
+    if [ ${#task_names[@]} -eq 0 ] && [ "$names_only" = false ]; then
         log_info "No worktrees found"
     fi
 
     for task_name in "${task_names[@]}"; do
         local task_dir="${worktrees_base}/${task_name}"
+
+        if [ "$merged_only" = true ]; then
+            if ! task_has_merged_subrepo "$task_dir"; then
+                continue
+            fi
+        fi
+
+        if [ "$names_only" = true ]; then
+            echo "$task_name"
+            continue
+        fi
 
         echo ""
         echo -e "  ${BOLD}${task_name}${NC}"
@@ -229,6 +284,8 @@ cmd_list() {
         fi
     done
 
-    echo ""
+    if [ "$names_only" = false ]; then
+        echo ""
+    fi
     return 0
 }

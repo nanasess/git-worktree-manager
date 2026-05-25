@@ -94,6 +94,30 @@ teardown_file() {
     assert_output --partial "feature/slash-test"
 }
 
+@test "list --names-only: prints task names only, one per line" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" list --names-only
+    assert_success
+    # No header, no dashes, no log_info — just the task name verbatim.
+    [ "$output" = "feature/slash-test" ]
+}
+
+@test "cleanup: accepts task names piped via stdin" {
+    cd "$SINGLE_REPO_DIR"
+    # Use --dry-run so the slash-task is still around for the next test.
+    run bash -c "printf 'feature/slash-test\n' | '$WORKTREE_CMD' cleanup --dry-run --force"
+    assert_success
+    assert_output --partial "Tasks to clean (1): feature/slash-test"
+}
+
+@test "cleanup: stdin with unknown task is skipped with warning" {
+    cd "$SINGLE_REPO_DIR"
+    run bash -c "printf 'no-such-task\n' | '$WORKTREE_CMD' cleanup --dry-run --force"
+    assert_success
+    assert_output --partial "Task not found, skipping: no-such-task"
+    assert_output --partial "No tasks read from stdin"
+}
+
 @test "cleanup: removes slash task name" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" cleanup feature/slash-test --force --delete-branches
