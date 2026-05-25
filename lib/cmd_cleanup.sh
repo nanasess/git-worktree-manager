@@ -194,6 +194,12 @@ cleanup_task() {
     fi
 
     for repo_dir in "${repo_dirs_arr[@]}"; do
+        # Skip dirty-check for broken worktrees: git diff exits non-zero
+        # because the gitdir pointer is stale, which would otherwise be
+        # misreported as uncommitted changes.
+        if ! git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1; then
+            continue
+        fi
         if ! git -C "$repo_dir" diff --quiet 2>/dev/null || ! git -C "$repo_dir" diff --cached --quiet 2>/dev/null; then
             has_changes=true
             local rn
@@ -237,15 +243,39 @@ cleanup_task() {
         main_repo="$(get_main_repo_path "$repo_dir" "$task_dir" "$project_root")"
         repo_names+=("$repo_name")
 
-        local branch
-        branch="$(git -C "$repo_dir" branch --show-current 2>/dev/null)"
+        # `|| true` keeps `set -e` from aborting when the worktree is broken
+        # (stale gitdir pointer makes `git branch --show-current` exit 128).
+        # The branch name is then empty and the broken-worktree path below
+        # falls back to direct filesystem removal.
+        local branch=""
+        branch="$(git -C "$repo_dir" branch --show-current 2>/dev/null || true)"
+
+        # A worktree is "broken" when its `.git` pointer no longer resolves
+        # (e.g., the main repo moved or the per-worktree gitdir was deleted
+        # manually). `git worktree remove` cannot help in that state, so
+        # remove the directory directly and best-effort prune the registry.
+        local is_broken=false
+        if ! git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1; then
+            is_broken=true
+        fi
 
         if [ "$dry_run" = true ]; then
-            log_info "  [DRY RUN] Remove worktree: ${repo_name} (branch: ${branch})"
-            if [ "$delete_branches" = true ]; then
+            log_info "  [DRY RUN] Remove worktree: ${repo_name} (branch: ${branch:-?})"
+            if [ "$delete_branches" = true ] && [ -n "$branch" ]; then
                 log_info "  [DRY RUN] Delete branch: ${branch}"
             fi
             RESULTS["$repo_name"]="OK: dry-run"
+            continue
+        fi
+
+        if [ "$is_broken" = true ]; then
+            log_warn "  ${repo_name}: broken worktree — removing directly"
+            rm -rf "$repo_dir"
+            if [ -d "$main_repo" ]; then
+                git -C "$main_repo" worktree prune 2>/dev/null || true
+            fi
+            log_success "  Removed broken worktree: ${repo_name}"
+            RESULTS["$repo_name"]="OK: broken worktree removed"
             continue
         fi
 
@@ -270,6 +300,12 @@ cleanup_task() {
                     RESULTS["$repo_name"]="OK: worktree removed (branch deletion failed)"
                 fi
             fi
+        else
+            # Main repo is gone — there is nothing to register-prune against,
+            # so just delete the orphan worktree directory.
+            log_warn "  ${repo_name}: main repo missing at ${main_repo} — removing directory only"
+            rm -rf "$repo_dir"
+            RESULTS["$repo_name"]="OK: orphan worktree removed"
         fi
     done
 
