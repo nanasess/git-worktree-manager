@@ -9,6 +9,14 @@
 # auth/network errors, or no matching PR). All failures are silent so the
 # list output stays clean.
 #
+# Per-repo cache: a single `worktree list` invocation can ask about dozens
+# of worktree branches across the same handful of GitHub repos. Calling
+# `gh pr list` once per branch turns a sub-second listing into ~50s on a
+# real multi-repo project. We cache the headRefNames of the 100 most
+# recent merged PRs per `<owner>/<repo>` so subsequent lookups are local
+# string matches. The 100 cap is fine for display purposes; older merged
+# branches may be missed, which is acceptable for a status label.
+#
 # parse_github_remote_url is defined in cmd_checkout.sh; both libraries are
 # sourced by the worktree entrypoint, so cross-module calls are safe.
 is_branch_merged_via_gh() {
@@ -17,6 +25,11 @@ is_branch_merged_via_gh() {
 
     [ -z "$branch" ] && return 1
     command -v gh >/dev/null 2>&1 || return 1
+
+    # Lazily declare the module-scoped cache. Bash 4.2+ supports `-gA`.
+    if ! declare -p __merged_branches_cache >/dev/null 2>&1; then
+        declare -gA __merged_branches_cache
+    fi
 
     local remotes
     remotes="$(git -C "$repo_dir" remote 2>/dev/null)" || return 1
@@ -42,13 +55,22 @@ is_branch_merged_via_gh() {
 
     [ -z "$owner" ] || [ -z "$repo" ] && return 1
 
-    # `gh pr list --head` does not support "<owner>:<branch>" syntax, so we
-    # match by branch name alone. False positives from same-name fork PRs are
-    # possible in theory but rare in practice.
-    local count
-    count="$(gh pr list --repo "${owner}/${repo}" --state merged \
-        --head "$branch" --json number --jq 'length' --limit 1 2>/dev/null)" || return 1
-    [ -n "$count" ] && [ "$count" -gt 0 ] 2>/dev/null
+    local cache_key="${owner}/${repo}"
+    if [ -z "${__merged_branches_cache[$cache_key]+_}" ]; then
+        # One network call per GitHub repo. `--head` is intentionally omitted:
+        # we filter on the client side via string match, which lets the cache
+        # answer every branch lookup for this repo without extra requests.
+        # False positives from same-name fork PRs are possible in theory but
+        # rare in practice.
+        local merged_list
+        merged_list="$(gh pr list --repo "$cache_key" --state merged --limit 100 \
+            --json headRefName --jq '.[].headRefName' 2>/dev/null)" || merged_list=""
+        # Wrap with leading/trailing spaces so the glob match below treats
+        # branch names as whole words.
+        __merged_branches_cache[$cache_key]=" $(echo "$merged_list" | tr '\n' ' ')"
+    fi
+
+    [[ "${__merged_branches_cache[$cache_key]}" == *" ${branch} "* ]]
 }
 
 cmd_list_usage() {
