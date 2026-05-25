@@ -103,6 +103,15 @@ cmd_list() {
                 else
                     repo_name="$(basename "$repo_dir")"
                 fi
+
+                # Detect broken worktrees (e.g., stale .git gitdir pointer)
+                # to avoid misleading "?" branch / "[modified]" labels and to
+                # keep `set -e` from aborting the loop later.
+                if ! git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1; then
+                    echo -e "    ${repo_name}: ${RED}[broken worktree]${NC}"
+                    continue
+                fi
+
                 local branch
                 branch="$(git -C "$repo_dir" branch --show-current 2>/dev/null || echo "?")"
 
@@ -112,10 +121,14 @@ cmd_list() {
                     status_icon=" ${YELLOW}[modified]${NC}"
                 fi
 
-                # Check for untracked files
-                local untracked
-                untracked=$(git -C "$repo_dir" ls-files --others --exclude-standard 2>/dev/null | head -n 1)
-                if [ "${PIPESTATUS[0]}" -ne 0 ] && [ "${PIPESTATUS[0]}" -ne 141 ]; then
+                # Check for untracked files.
+                # `|| ls_files_rc=$?` keeps `set -euo pipefail` from aborting
+                # when git fails; PIPESTATUS is not preserved across `|| true`,
+                # so we capture the rc directly. rc=141 means head -n 1 closed
+                # the pipe (SIGPIPE'd git) — the captured first line is valid.
+                local untracked="" ls_files_rc=0
+                untracked=$(git -C "$repo_dir" ls-files --others --exclude-standard 2>/dev/null | head -n 1) || ls_files_rc=$?
+                if [ "$ls_files_rc" -ne 0 ] && [ "$ls_files_rc" -ne 141 ]; then
                     untracked=""
                 fi
                 if [ -n "$untracked" ]; then

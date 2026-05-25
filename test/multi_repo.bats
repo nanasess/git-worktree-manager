@@ -151,3 +151,37 @@ teardown_file() {
 
     [ ! -d "${WORKTREES_DIR}/pr-1" ]
 }
+
+# Regression: a worktree sub-repo whose `.git` pointer is stale (gitdir
+# references a path that no longer exists) must not cause `worktree list`
+# to silently abort under `set -euo pipefail`. The bad repo should be
+# labeled `[broken worktree]` and remaining repos must still be listed.
+@test "list: broken sub-repo is reported and does not abort listing" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" create broken-task --no-install
+    assert_success
+
+    # Point EcAuth's .git at a non-existent gitdir to simulate a stale worktree.
+    echo "gitdir: /nonexistent/path/that/does/not/exist" \
+        > "${WORKTREES_DIR}/broken-task/EcAuth/.git"
+
+    run "$WORKTREE_CMD" list
+    assert_success
+    assert_output --partial "broken-task"
+    assert_output --partial "EcAuth"
+    assert_output --partial "[broken worktree]"
+    # Other repos in the same task must still be enumerated.
+    assert_output --partial "ecauth-website"
+    assert_output --partial "ecauth-auth-js"
+
+    # Cleanup: restore the .git pointer so worktree cleanup can run.
+    rm -rf "${WORKTREES_DIR}/broken-task"
+    git -C "${MULTI_REPO_DIR}/EcAuth" worktree prune
+    git -C "${MULTI_REPO_DIR}/ecauth-website" worktree remove --force "${WORKTREES_DIR}/broken-task/ecauth-website" 2>/dev/null || true
+    git -C "${MULTI_REPO_DIR}/ecauth-auth-js" worktree remove --force "${WORKTREES_DIR}/broken-task/ecauth-auth-js" 2>/dev/null || true
+    git -C "${MULTI_REPO_DIR}/ecauth-website" worktree prune
+    git -C "${MULTI_REPO_DIR}/ecauth-auth-js" worktree prune
+    git -C "${MULTI_REPO_DIR}/EcAuth" branch -D broken-task 2>/dev/null || true
+    git -C "${MULTI_REPO_DIR}/ecauth-website" branch -D broken-task 2>/dev/null || true
+    git -C "${MULTI_REPO_DIR}/ecauth-auth-js" branch -D broken-task 2>/dev/null || true
+}
