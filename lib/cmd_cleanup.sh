@@ -3,6 +3,28 @@
 # cmd_cleanup.sh - cleanup subcommand
 #
 
+# Reject task names that could escape the worktrees base.
+# A valid task name corresponds to a git branch name; `git check-ref-format`
+# already forbids `..` and leading `.` in branch components, so this filter
+# does not false-positive on legitimate worktree task names — but it does
+# stop accidental (`echo .. | worktree cleanup`) and malicious (a calling
+# script feeding untrusted strings) inputs from reaching `rm -rf "$task_dir"`.
+#
+# We avoid `realpath` because BSD realpath (macOS default) lacks `-m`
+# (missing-path) support; the case-pattern approach is portable across
+# WSL2 / Ubuntu / macOS without coreutils.
+validate_task_name() {
+    local name="$1"
+    [ -z "$name" ] && return 1
+    case "$name" in
+        # Absolute path, anywhere containing `..`, bare `.`, leading `./`,
+        # or trailing `/.` — all of these would resolve outside or onto
+        # the worktrees base itself.
+        /*|*..*|.|./*|*/.) return 1 ;;
+    esac
+    return 0
+}
+
 cmd_cleanup_usage() {
     echo -e "${BOLD}worktree cleanup${NC} - Remove worktrees"
     echo ""
@@ -86,6 +108,10 @@ cmd_cleanup() {
     local tasks_to_clean=()
 
     if [ -n "$task_name" ]; then
+        if ! validate_task_name "$task_name"; then
+            log_error "Invalid task name (path traversal not allowed): ${task_name}"
+            return 1
+        fi
         local task_dir="${worktrees_base}/${task_name}"
         if [ ! -d "$task_dir" ]; then
             log_error "Task not found: ${task_name}"
@@ -117,6 +143,10 @@ cmd_cleanup() {
         local line
         while IFS= read -r line; do
             [ -z "$line" ] && continue
+            if ! validate_task_name "$line"; then
+                log_warn "Invalid task name (path traversal not allowed), skipping: ${line}"
+                continue
+            fi
             local task_dir_check="${worktrees_base}/${line}"
             if [ ! -d "$task_dir_check" ]; then
                 log_warn "Task not found, skipping: ${line}"

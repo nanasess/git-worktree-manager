@@ -118,6 +118,48 @@ teardown_file() {
     assert_output --partial "No tasks read from stdin"
 }
 
+# Security: path traversal via stdin / argument must be rejected before
+# the task_dir existence check ever runs. Without validation, '.' would
+# resolve to worktrees_base itself and '..' to its parent — both would
+# eventually reach `rm -rf "$task_dir"` in cleanup_task.
+@test "cleanup: stdin '.' is rejected as path traversal" {
+    cd "$SINGLE_REPO_DIR"
+    run bash -c "printf '.\n' | '$WORKTREE_CMD' cleanup --dry-run --force"
+    assert_success
+    assert_output --partial "Invalid task name (path traversal not allowed), skipping: ."
+    refute_output --partial "Tasks to clean (1)"
+}
+
+@test "cleanup: stdin '..' is rejected as path traversal" {
+    cd "$SINGLE_REPO_DIR"
+    run bash -c "printf '..\n' | '$WORKTREE_CMD' cleanup --dry-run --force"
+    assert_success
+    assert_output --partial "Invalid task name (path traversal not allowed), skipping: .."
+    refute_output --partial "Tasks to clean (1)"
+}
+
+@test "cleanup: stdin absolute path is rejected as path traversal" {
+    cd "$SINGLE_REPO_DIR"
+    run bash -c "printf '/tmp\n' | '$WORKTREE_CMD' cleanup --dry-run --force"
+    assert_success
+    assert_output --partial "Invalid task name (path traversal not allowed), skipping: /tmp"
+    refute_output --partial "Tasks to clean (1)"
+}
+
+@test "cleanup: argument '..' is rejected with non-zero exit" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup .. --dry-run --force
+    assert_failure
+    assert_output --partial "Invalid task name (path traversal not allowed): .."
+}
+
+@test "cleanup: argument '.' is rejected with non-zero exit" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup . --dry-run --force
+    assert_failure
+    assert_output --partial "Invalid task name (path traversal not allowed): ."
+}
+
 @test "cleanup: removes slash task name" {
     cd "$SINGLE_REPO_DIR"
     run "$WORKTREE_CMD" cleanup feature/slash-test --force --delete-branches
