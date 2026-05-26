@@ -3,11 +3,34 @@
 # cmd_cleanup.sh - cleanup subcommand
 #
 
+# Reject task names that could escape the worktrees base.
+# A valid task name corresponds to a git branch name; `git check-ref-format`
+# already forbids `..` and leading `.` in branch components, so this filter
+# does not false-positive on legitimate worktree task names — but it does
+# stop accidental (`echo .. | worktree cleanup`) and malicious (a calling
+# script feeding untrusted strings) inputs from reaching `rm -rf "$task_dir"`.
+#
+# We avoid `realpath` because BSD realpath (macOS default) lacks `-m`
+# (missing-path) support; the case-pattern approach is portable across
+# WSL2 / Ubuntu / macOS without coreutils.
+validate_task_name() {
+    local name="$1"
+    [ -z "$name" ] && return 1
+    case "$name" in
+        # Absolute path, anywhere containing `..`, bare `.`, leading `./`,
+        # or trailing `/.` — all of these would resolve outside or onto
+        # the worktrees base itself.
+        /*|*..*|.|./*|*/.) return 1 ;;
+    esac
+    return 0
+}
+
 cmd_cleanup_usage() {
     echo -e "${BOLD}worktree cleanup${NC} - Remove worktrees"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
     echo "    worktree cleanup [task-name] [OPTIONS]"
+    echo "    <task-name-source> | worktree cleanup [OPTIONS]"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
     echo "    --merged              Auto-detect and remove merged tasks"
@@ -23,6 +46,7 @@ cmd_cleanup_usage() {
     echo "    worktree cleanup feature-login --force --delete-branches"
     echo "    worktree cleanup --merged --dry-run"
     echo "    worktree cleanup --merged --force --delete-branches"
+    echo "    worktree list --merged --names-only | worktree cleanup --force"
 }
 
 cmd_cleanup() {
@@ -84,6 +108,10 @@ cmd_cleanup() {
     local tasks_to_clean=()
 
     if [ -n "$task_name" ]; then
+        if ! validate_task_name "$task_name"; then
+            log_error "Invalid task name (path traversal not allowed): ${task_name}"
+            return 1
+        fi
         local task_dir="${worktrees_base}/${task_name}"
         if [ ! -d "$task_dir" ]; then
             log_error "Task not found: ${task_name}"
@@ -107,8 +135,32 @@ cmd_cleanup() {
             log_info "No merged tasks found"
             return 0
         fi
+    elif [ ! -t 0 ]; then
+        # No task name and stdin is a pipe / redirect: read task names from it.
+        # This enables `worktree list --merged --names-only | worktree cleanup`.
+        # Slash-containing names (e.g. feature/login) are supported because
+        # `read -r` preserves the line verbatim.
+        local line
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            if ! validate_task_name "$line"; then
+                log_warn "Invalid task name (path traversal not allowed), skipping: ${line}"
+                continue
+            fi
+            local task_dir_check="${worktrees_base}/${line}"
+            if [ ! -d "$task_dir_check" ]; then
+                log_warn "Task not found, skipping: ${line}"
+                continue
+            fi
+            tasks_to_clean+=("$line")
+        done
+
+        if [ ${#tasks_to_clean[@]} -eq 0 ]; then
+            log_info "No tasks read from stdin"
+            return 0
+        fi
     else
-        log_error "Specify a task name or --merged"
+        log_error "Specify a task name, --merged, or pipe task names via stdin"
         cmd_cleanup_usage
         return 1
     fi

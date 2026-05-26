@@ -96,7 +96,10 @@ What happens:
 ### `worktree list`
 
 ```bash
-worktree list    # or: worktree ls
+worktree list                       # or: worktree ls
+worktree list --merged              # only tasks with at least one merged sub-repo
+worktree list --names-only          # task names only, one per line (pipe-friendly)
+worktree list --merged --names-only # combine: feed directly into `worktree cleanup`
 ```
 
 Shows all tasks with branch names, modification status, and untracked files.
@@ -110,6 +113,11 @@ Each repository line may carry status labels:
 | `[merged]` | The branch corresponds to a merged GitHub PR (detected via `gh pr list --state merged`, so squash/rebase merges are caught) |
 
 The `[merged]` label requires the [`gh` CLI](https://cli.github.com/) to be installed and authenticated against the remote; it is silently skipped when `gh` is missing, the remote is not GitHub, or the API call fails.
+
+| Option | Description |
+|---|---|
+| `--merged` | Filter to tasks where **at least one** sub-repo has a merged head branch (any-merged). Stricter than `cleanup --merged`, which requires every sub-repo to be merged. |
+| `--names-only` | Print task names only — no headers, colors, or status labels. Combine with `--merged` to pipe into `worktree cleanup`. |
 
 ### `worktree checkout [branch|URL]`
 
@@ -150,16 +158,21 @@ Runs `git pull --ff-only` on each repo with a summary of results.
 worktree cleanup feature-login --force --delete-branches
 worktree cleanup --merged --force --delete-branches
 worktree cleanup --merged --dry-run
+
+# Pipe task names in (one per line) — works with `worktree list --names-only`
+worktree list --merged --names-only | worktree cleanup --force
 ```
 
 Aliases: `worktree clean`, `worktree rm`
 
 | Option | Description |
 |---|---|
-| `--merged` | Auto-detect merged tasks |
+| `--merged` | Auto-detect merged tasks (all sub-repos must be merged) |
 | `--delete-branches` | Also delete branches |
 | `--dry-run` | Preview without deleting |
 | `--force` | Skip confirmation |
+
+When no task name is supplied and stdin is a pipe, `cleanup` reads one task name per line from stdin. Lines that don't correspond to a known task are skipped with a warning.
 
 ### `worktree install --skills`
 

@@ -80,6 +80,22 @@ require_gh_for_self_repo() {
     assert_output --partial "[merged]"
 }
 
+@test "list --merged --names-only: prints only merged tasks, one per line" {
+    require_gh_for_self_repo
+
+    # The merged-task worktree must still exist from earlier tests.
+    [ -d "${WORKTREES_DIR}/pr-${SELF_PR_NUMBER}/git-worktree-manager" ]
+
+    cd "$PROJECT_DIR"
+    run "$WORKTREE_CMD" list --merged --names-only
+    assert_success
+    # Output is just the task name(s); no headers, no decoration.
+    assert_output --partial "pr-${SELF_PR_NUMBER}"
+    # The non-merged setup-chromedriver-only line must not surface.
+    refute_output --partial "============"
+    refute_output --partial "[merged]"
+}
+
 @test "cleanup: removes self-repo PR worktree" {
     require_gh_for_self_repo
 
