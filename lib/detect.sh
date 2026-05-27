@@ -122,34 +122,73 @@ list_non_git_items() {
     echo "${items[@]}"
 }
 
-# Detect the default branch of a repository (from origin/HEAD)
-detect_default_branch() {
+# Detect the default branch of a specific remote (from <remote>/HEAD).
+# Stdout on success: branch name (e.g., "main").
+# Returns 1 if detection fails.
+detect_remote_default_branch() {
     local repo_path="$1"
+    local remote="$2"
 
-    # Use origin/HEAD if set
     local ref
-    ref=$(git -C "$repo_path" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)
+    ref=$(git -C "$repo_path" symbolic-ref "refs/remotes/${remote}/HEAD" 2>/dev/null)
     if [ -n "$ref" ]; then
-        echo "${ref#refs/remotes/origin/}"
+        echo "${ref#refs/remotes/${remote}/}"
         return
     fi
 
-    # Try to auto-detect origin/HEAD
-    if git -C "$repo_path" remote set-head origin --auto >/dev/null 2>&1; then
-        ref=$(git -C "$repo_path" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)
+    if git -C "$repo_path" remote set-head "$remote" --auto >/dev/null 2>&1; then
+        ref=$(git -C "$repo_path" symbolic-ref "refs/remotes/${remote}/HEAD" 2>/dev/null)
         if [ -n "$ref" ]; then
-            echo "${ref#refs/remotes/origin/}"
+            echo "${ref#refs/remotes/${remote}/}"
             return
         fi
     fi
 
-    # Fallback: main or master
-    if git -C "$repo_path" rev-parse --verify origin/main >/dev/null 2>&1; then
+    if git -C "$repo_path" rev-parse --verify "${remote}/main" >/dev/null 2>&1; then
         echo "main"
-    elif git -C "$repo_path" rev-parse --verify origin/master >/dev/null 2>&1; then
+    elif git -C "$repo_path" rev-parse --verify "${remote}/master" >/dev/null 2>&1; then
         echo "master"
     else
-        log_error "Cannot detect default branch: $repo_path"
         return 1
     fi
+}
+
+# Detect the base remote and its default branch.
+# Prefers 'upstream' (fork workflow) over 'origin'.
+# Stdout on success: "<remote> <branch>" (e.g., "upstream master").
+# Returns 1 if neither remote yields a default branch.
+detect_base_remote_branch() {
+    local repo_path="$1"
+
+    if git -C "$repo_path" remote get-url upstream >/dev/null 2>&1; then
+        local upstream_default
+        if upstream_default="$(detect_remote_default_branch "$repo_path" upstream)"; then
+            echo "upstream ${upstream_default}"
+            return
+        fi
+    fi
+
+    local origin_default
+    if origin_default="$(detect_remote_default_branch "$repo_path" origin)"; then
+        echo "origin ${origin_default}"
+        return
+    fi
+
+    return 1
+}
+
+# Detect the default branch of a repository.
+# Prefers upstream's default branch when an 'upstream' remote exists,
+# falling back to origin (fork workflows where origin diverges from upstream).
+detect_default_branch() {
+    local repo_path="$1"
+
+    local result
+    if result="$(detect_base_remote_branch "$repo_path")"; then
+        echo "${result#* }"
+        return
+    fi
+
+    log_error "Cannot detect default branch: $repo_path"
+    return 1
 }

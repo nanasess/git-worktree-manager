@@ -318,3 +318,37 @@ teardown_file() {
     git -C "$SINGLE_REPO_DIR" remote remove upstream 2>/dev/null || true
     git -C "$SINGLE_REPO_DIR" remote set-url origin "https://github.com/nanasess/setup-chromedriver.git"
 }
+
+# When an 'upstream' remote exists, 'worktree create' must base the new
+# worktree on upstream's default branch (fork workflow where origin diverges).
+@test "create: bases worktree on upstream when upstream remote exists" {
+    cd "$SINGLE_REPO_DIR"
+    # Simulate fork workflow by aliasing the same canonical URL as upstream.
+    # Any valid fetchable URL works; using the same URL keeps the test offline-friendly
+    # relative to other tests that already clone it.
+    git -C "$SINGLE_REPO_DIR" remote add upstream "https://github.com/nanasess/setup-chromedriver.git"
+
+    run "$WORKTREE_CMD" create upstream-base-task --no-install
+    assert_success
+    assert_output --partial "git fetch upstream"
+    assert_output --partial "Base branch: upstream/"
+
+    [ -d "${WORKTREES_DIR}/upstream-base-task" ]
+    git -C "$SINGLE_REPO_DIR" rev-parse --verify upstream-base-task
+
+    # The new branch must point at upstream's tip, not origin's.
+    # Resolve upstream/HEAD dynamically so this assertion does not depend on
+    # the upstream repo's default branch name (e.g. EC-CUBE/ec-cube uses 4.4).
+    local task_sha upstream_head_ref upstream_sha
+    task_sha=$(git -C "$SINGLE_REPO_DIR" rev-parse upstream-base-task)
+    upstream_head_ref=$(git -C "$SINGLE_REPO_DIR" symbolic-ref --short refs/remotes/upstream/HEAD)
+    upstream_sha=$(git -C "$SINGLE_REPO_DIR" rev-parse "$upstream_head_ref")
+    [ "$task_sha" = "$upstream_sha" ]
+}
+
+@test "cleanup: removes upstream-based worktree and restores remotes" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup upstream-base-task --force --delete-branches
+    assert_success
+    git -C "$SINGLE_REPO_DIR" remote remove upstream 2>/dev/null || true
+}

@@ -36,6 +36,12 @@ worktree install --skills [--global]
 
 すべてのコマンドはプロジェクトルートまたは `.worktrees/` ディレクトリ内から実行可能。
 
+## base branch の決定ロジック
+
+`worktree create` および `cleanup --merged` のマージ判定は、**`upstream` remote が存在する場合は `upstream/HEAD` を優先**し、なければ `origin/HEAD` を使う。fork ワークフロー (例: `origin` = `nanasess/ec-cube2`、`upstream` = `EC-CUBE/ec-cube2`) で origin が upstream より遅れている場合でも、worktree は upstream の最新を base にできる。`upstream` がある場合は `git fetch upstream` も自動で実行する。
+
+`worktree checkout` (引数なし / branch 指定) は既存 local ブランチを切り替えるだけなので、upstream の追従はユーザ側で `git pull upstream <branch>` する想定 (local commit を破壊しないため意図的に手動)。
+
 ## worktree 配置構造
 
 worktree はプロジェクトの隣に `<project>.worktrees/` として配置されます（リポジトリ内にはノイズが入らない）。
