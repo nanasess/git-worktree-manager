@@ -144,18 +144,28 @@ cmd_create() {
             log_warn "  Fetch failed (continuing)"
         fi
 
-        # Detect default branch
-        local default_branch
-        default_branch="$(detect_default_branch "$repo_path")" || {
+        # In fork workflows, also fetch upstream so its default branch is up to date
+        if git -C "$repo_path" remote get-url upstream >/dev/null 2>&1; then
+            log_info "  git fetch upstream..."
+            git -C "$repo_path" fetch upstream 2>&1 | head -n 5
+            if [ "${PIPESTATUS[0]}" -ne 0 ] && [ "${PIPESTATUS[0]}" -ne 141 ]; then
+                log_warn "  Fetch upstream failed (continuing)"
+            fi
+        fi
+
+        # Detect base remote (prefers upstream when present) and default branch
+        local base_info base_remote default_branch
+        base_info="$(detect_base_remote_branch "$repo_path")" || {
             log_error "  Cannot detect default branch"
             RESULTS["$display_name"]="FAIL: default branch detection failed"
             continue
         }
-        log_info "  Base branch: origin/${default_branch}"
+        read -r base_remote default_branch <<< "$base_info"
+        log_info "  Base branch: ${base_remote}/${default_branch}"
 
         # Create worktree
         log_info "  Creating worktree: ${branch_name}"
-        if git -C "$repo_path" worktree add -b "$branch_name" "$worktree_path" "origin/${default_branch}" 2>&1; then
+        if git -C "$repo_path" worktree add -b "$branch_name" "$worktree_path" "${base_remote}/${default_branch}" 2>&1; then
             log_success "  Created worktree: ${worktree_path}"
             RESULTS["$display_name"]="OK: branch=${branch_name}"
             created_repos+=("$repo")

@@ -211,11 +211,14 @@ is_task_merged() {
             continue
         fi
 
-        local default_branch
-        default_branch="$(detect_default_branch "$main_repo" 2>/dev/null)" || continue
+        local base_info base_remote default_branch
+        base_info="$(detect_base_remote_branch "$main_repo" 2>/dev/null)" || continue
+        read -r base_remote default_branch <<< "$base_info"
 
-        # Check if branch is merged into default branch
-        if ! git -C "$main_repo" branch --merged "origin/${default_branch}" 2>/dev/null | grep -Fqw "$branch"; then
+        # Check if branch is merged into the base remote's default branch.
+        # In fork workflows we compare against upstream so merges that landed
+        # upstream (but haven't been synced to origin yet) are recognized.
+        if ! git -C "$main_repo" branch --merged "${base_remote}/${default_branch}" 2>/dev/null | grep -Fqw "$branch"; then
             return 1
         fi
     done

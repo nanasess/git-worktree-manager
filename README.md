@@ -80,8 +80,8 @@ worktree create quick-test --no-install
 ```
 
 What happens:
-1. `git fetch origin` on each repo
-2. Create worktree based on the default branch
+1. `git fetch origin` on each repo (also `git fetch upstream` if the remote exists)
+2. Create worktree based on the default branch — **`upstream` is preferred** over `origin` when both are configured (fork workflows where `origin` is your fork and `upstream` is the canonical repo)
 3. Generate `CLAUDE.md` with worktree context
 4. Symlink non-git items (multi-repo)
 5. Copy `mise.toml` / `mise.local.toml` into each worktree (even when gitignored)
