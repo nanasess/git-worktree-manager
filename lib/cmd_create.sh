@@ -140,7 +140,11 @@ cmd_create() {
         # Fetch
         log_info "  git fetch origin..."
         git -C "$repo_path" fetch origin 2>&1 | head -n 5
-        if [ "${PIPESTATUS[0]}" -ne 0 ] && [ "${PIPESTATUS[0]}" -ne 141 ]; then
+        # Capture PIPESTATUS into a local variable before any other command runs;
+        # the next `[` would otherwise overwrite PIPESTATUS with its own status,
+        # making the SIGPIPE (141) check evaluate the wrong exit code.
+        local fetch_status="${PIPESTATUS[0]}"
+        if [ "$fetch_status" -ne 0 ] && [ "$fetch_status" -ne 141 ]; then
             log_warn "  Fetch failed (continuing)"
         fi
 
@@ -148,7 +152,8 @@ cmd_create() {
         if git -C "$repo_path" remote get-url upstream >/dev/null 2>&1; then
             log_info "  git fetch upstream..."
             git -C "$repo_path" fetch upstream 2>&1 | head -n 5
-            if [ "${PIPESTATUS[0]}" -ne 0 ] && [ "${PIPESTATUS[0]}" -ne 141 ]; then
+            local upstream_fetch_status="${PIPESTATUS[0]}"
+            if [ "$upstream_fetch_status" -ne 0 ] && [ "$upstream_fetch_status" -ne 141 ]; then
                 log_warn "  Fetch upstream failed (continuing)"
             fi
         fi
