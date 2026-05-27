@@ -336,11 +336,13 @@ teardown_file() {
     [ -d "${WORKTREES_DIR}/upstream-base-task" ]
     git -C "$SINGLE_REPO_DIR" rev-parse --verify upstream-base-task
 
-    # The new branch must point at upstream's tip, not origin's
-    local task_sha upstream_sha
+    # The new branch must point at upstream's tip, not origin's.
+    # Resolve upstream/HEAD dynamically so this assertion does not depend on
+    # the upstream repo's default branch name (e.g. EC-CUBE/ec-cube uses 4.4).
+    local task_sha upstream_head_ref upstream_sha
     task_sha=$(git -C "$SINGLE_REPO_DIR" rev-parse upstream-base-task)
-    upstream_sha=$(git -C "$SINGLE_REPO_DIR" rev-parse upstream/master 2>/dev/null \
-                  || git -C "$SINGLE_REPO_DIR" rev-parse upstream/main)
+    upstream_head_ref=$(git -C "$SINGLE_REPO_DIR" symbolic-ref --short refs/remotes/upstream/HEAD)
+    upstream_sha=$(git -C "$SINGLE_REPO_DIR" rev-parse "$upstream_head_ref")
     [ "$task_sha" = "$upstream_sha" ]
 }
 
