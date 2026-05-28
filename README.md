@@ -212,6 +212,11 @@ Detected automatically during `worktree create`:
 | `composer.lock` | `composer install` |
 | `*.sln` / `*.csproj` | `dotnet restore` |
 
+Each package system is evaluated **independently**, so polyglot projects
+(e.g. EC-CUBE with `composer.json` + `package.json`) install every applicable
+manager. Within the Node.js family (npm / pnpm / yarn), the managers are
+mutually exclusive and resolved with priority `npm > pnpm > yarn`.
+
 Skip with `--no-install`.
 
 ## mise Version Inheritance

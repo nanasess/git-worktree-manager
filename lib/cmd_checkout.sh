@@ -346,12 +346,12 @@ cmd_checkout_pr() {
 
     # Dependency installation
     if [ "$no_install" = false ]; then
-        local deps_type
-        deps_type="$(detect_deps_type "$worktree_path")"
-        if [ -n "$deps_type" ]; then
+        local deps_types_csv
+        deps_types_csv="$(detect_deps_types "$worktree_path" | paste -sd, -)"
+        if [ -n "$deps_types_csv" ]; then
             echo ""
             log_info "Installing dependencies..."
-            log_info "${matching_repo_display} (${deps_type}):"
+            log_info "${matching_repo_display} (${deps_types_csv}):"
             install_deps "$worktree_path" || true
         fi
     else
