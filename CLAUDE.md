@@ -48,6 +48,17 @@ worktree はプロジェクトの隣に `<project>.worktrees/` として配置�
 
 create 時に CLAUDE.md へ Worktree Context（タスク名、作業ディレクトリ、プロジェクトルート）を付加して生成する。
 
+## 依存解決ロジック
+
+`worktree create` / `worktree checkout` は、対象 worktree ディレクトリ直下の lock ファイルを検出して依存関係をインストールする。
+
+- **Node.js 系 (`npm` / `pnpm` / `yarn`) は排他**: 同一ディレクトリに複数の lock がある場合は `npm > pnpm > yarn` の優先順位で 1 つだけ実行する。
+- **`composer` と `dotnet` は Node.js 系と独立**: `composer.lock` と `package-lock.json` が併存する EC-CUBE 4 系のようなプロジェクトでは、`composer install` と `npm install` の両方が実行される。
+- lock ファイルが無い場合 (`composer.json` のみ等) は今は何もしない。
+- 部分失敗 (composer 成功 / npm 失敗) は `log_warn` で記録しつつ、1 つでも成功すれば成功扱いで継続する。呼び出し側は `|| true` で吸収済みのため、worktree 作成自体は止まらない。
+
+実装は `lib/deps.sh` の `detect_deps_types` (検出) と `install_deps` (実行) に集約されている。
+
 ## mise 設定の引き継ぎ
 
 `worktree create` は、ソース側に `mise.toml` / `mise.local.toml` が存在する場合、それらを新しい worktree にコピーする。gitignored なローカル上書き (`mise.local.toml` など) でも、mise のバージョン固定を引き継げる。
