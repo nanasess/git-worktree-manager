@@ -15,6 +15,21 @@ Git worktrees are great for parallel development — but managing them is painfu
 
 `worktree` solves this with one command: create isolated workspaces, run hooks, install deps, and clean up — across all repos at once.
 
+## Requirements
+
+- **`git`**
+- **Bash 4.0 or newer** — the scripts use associative arrays (`declare -A`).
+  - Linux distros ship Bash 4+/5 already.
+  - **macOS** ships Bash 3.2 as `/bin/bash`. Install a newer bash and make sure
+    it precedes `/bin` in `PATH`:
+
+    ```bash
+    brew install bash      # installs Bash 5 under $(brew --prefix)/bin
+    ```
+
+    The `worktree` shebang is `#!/usr/bin/env bash`, so the newer bash on `PATH`
+    is used automatically. Running under Bash 3.2 exits early with a clear error.
+
 ## Quick Start
 
 ```bash

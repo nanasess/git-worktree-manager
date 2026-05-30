@@ -12,6 +12,16 @@ Claude Code の並列処理（サブエージェント）で、各エージェ�
 ln -sf ~/git-repos/git-worktree-manager/worktree ~/.local/bin/worktree
 ```
 
+## 動作要件 (Bash バージョン)
+
+連想配列 (`declare -A`) を使うため **Bash 4.0 以上が必須**。macOS の `/bin/bash` は GPLv3 回避のため Bash 3.2 のままなので、そのままでは `declare: -A: invalid option` で失敗する。
+
+- `worktree` の shebang は `#!/usr/bin/env bash` とし、PATH 上の新しい bash を使う。`#!/bin/bash` だと macOS で常に 3.2 が使われるため**絶対パス固定にしない**。
+- macOS では `brew install bash`（or Nix/home-manager）で Bash 5 を入れ、`$(brew --prefix)/bin` を `/bin` より前に PATH へ通す。ユーザーは既に Nix/home-manager で bash を管理しているため通常は充足済み。
+- 起動直後に `BASH_VERSINFO` で 4 未満を検出したら、`brew install bash` を案内して明示エラー終了する（cryptic な `declare -A` エラーを避ける）。
+- 併せて `worktree` / `lib/common.sh` の symlink 解決は `readlink -f` (BSD 非対応) を使わず、素の `readlink` ＋ 相対パス解決で行う。
+- CI は `ubuntu-latest` ＋ `macos-latest` の matrix で実行し、macOS leg では `brew install bash` 後に PATH を通してから bats を走らせる。
+
 ## コマンド
 
 ```bash
