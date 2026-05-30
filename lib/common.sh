@@ -68,17 +68,43 @@ get_task_dir() {
     echo "$(get_worktrees_base)/${task_name}"
 }
 
-# Generate CLAUDE.md with worktree context prepended.
+# Append the Worktree Context block to CLAUDE.local.md.
+# Writes to CLAUDE.local.md (not CLAUDE.md) so the original CLAUDE.md is never
+# modified: no diff is produced on a tracked single-repo CLAUDE.md, and the
+# multi-repo project-root CLAUDE.md keeps its plain symlink.
 # Ensures the agent remembers the working directory after /compact.
-generate_worktree_claude_md() {
-    local src="$1"
-    local dst="$2"
-    local task_name="$3"
-    local task_dir="$4"
-    local project_root="$5"
+#
+# Behaviour:
+#   - Never writes through a symlink: if dst is a symlink (e.g. a multi-repo
+#     symlinked CLAUDE.local.md), it is replaced with a real copy first so the
+#     project-root original is left untouched.
+#   - Idempotent: if the context block is already present, nothing is written
+#     (avoids duplicate blocks when checkout re-runs on an existing dir).
+#   - Preserves any pre-existing local content by appending, not overwriting.
+write_worktree_context() {
+    local dst="$1"
+    local task_name="$2"
+    local task_dir="$3"
+    local project_root="$4"
 
-    {
-        cat <<WORKTREE_CONTEXT
+    # If dst is a symlink, replace it with a real copy so we never write
+    # through to the linked project-root original.
+    if [ -L "$dst" ]; then
+        local target
+        target="$(readlink -f "$dst")"
+        rm -f "$dst"
+        [ -f "$target" ] && cp "$target" "$dst"
+    fi
+
+    # Idempotent: skip if the context block is already present.
+    if [ -f "$dst" ] && grep -q '^# Worktree Context$' "$dst"; then
+        return
+    fi
+
+    # Separate from any pre-existing content with a blank line.
+    [ -s "$dst" ] && printf '\n' >> "$dst"
+
+    cat >> "$dst" <<WORKTREE_CONTEXT
 # Worktree Context
 
 This directory was created by \`worktree create ${task_name}\` as a working worktree.
@@ -93,12 +119,7 @@ This directory was created by \`worktree create ${task_name}\` as a working work
 ## Testing
 
 Run \`docker compose up\` or other commands within this directory (\`${task_dir}\`) to verify changes.
-
----
-
 WORKTREE_CONTEXT
-        cat "$src"
-    } > "$dst"
 }
 
 # Copy mise config files (mise.toml, mise.local.toml) from source to destination.

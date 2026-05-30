@@ -46,7 +46,12 @@ worktree install --skills [--global]
 
 worktree はプロジェクトの隣に `<project>.worktrees/` として配置されます（リポジトリ内にはノイズが入らない）。
 
-create 時に CLAUDE.md へ Worktree Context（タスク名、作業ディレクトリ、プロジェクトルート）を付加して生成する。
+create / checkout 時に Worktree Context（タスク名、作業ディレクトリ、プロジェクトルート）を `CLAUDE.local.md` へ書き込む。**オリジナルの `CLAUDE.md` は一切変更しない**ため、単一リポでは tracked な `CLAUDE.md` に差分が出ず、マルチリポでも project root の `CLAUDE.md` は素の symlink のまま維持される。
+
+- 既存の `CLAUDE.local.md`（ユーザー独自のローカルメモリ）がある場合は上書きせず**追記**する。`# Worktree Context` マーカーが既にあれば再追記しない（冪等）。
+- マルチリポで project root に `CLAUDE.local.md` がある場合は symlink ではなく**実体コピー**してから追記するため、原本（リンク先）を破壊しない。
+- 実装は `lib/common.sh` の `write_worktree_context` に集約。
+- `CLAUDE.local.md` は worktree 側で untracked な新規ファイルになるので、対象リポで `.gitignore` 済みであることが望ましい（本ツールは `.gitignore` を自動編集しない）。
 
 ## 依存解決ロジック
 
