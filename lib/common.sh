@@ -88,10 +88,16 @@ write_worktree_context() {
     local project_root="$4"
 
     # If dst is a symlink, replace it with a real copy so we never write
-    # through to the linked project-root original.
+    # through to the linked project-root original. Use plain `readlink`
+    # (BSD/macOS has no `-f`) and resolve a relative target against the
+    # symlink's own directory, not the current working directory.
     if [ -L "$dst" ]; then
         local target
-        target="$(readlink -f "$dst")"
+        target="$(readlink "$dst")"
+        case "$target" in
+            /*) ;;
+            *) target="$(dirname "$dst")/$target" ;;
+        esac
         rm -f "$dst"
         [ -f "$target" ] && cp "$target" "$dst"
     fi
