@@ -297,7 +297,7 @@ cmd_checkout_pr() {
     fi
     log_success "Created worktree: ${worktree_path}"
 
-    # Symlinks (multi-repo) and CLAUDE.md with worktree context
+    # Symlinks (multi-repo) and worktree context in CLAUDE.local.md
     if [ "$matching_repo" != "." ]; then
         log_info "Creating symlinks..."
         local items_str
@@ -308,23 +308,27 @@ cmd_checkout_pr() {
                 local src="${project_root}/${item}"
                 local dst="${task_dir}/${item}"
                 [ -e "$dst" ] && continue
-                if [ "$item" = "CLAUDE.md" ]; then
-                    generate_worktree_claude_md "$src" "$dst" "$task_name" "$task_dir" "$project_root"
-                    log_info "  ${item} -> generated (with worktree context)"
+                if [ "$item" = "CLAUDE.local.md" ]; then
+                    # Copy (not symlink) so the worktree context can be appended
+                    # without writing through to the project-root original.
+                    cp "$src" "$dst"
+                    log_info "  ${item} -> copied (from ${src})"
                 else
                     ln -sf "$src" "$dst"
                     log_info "  ${item} -> ${src}"
                 fi
             done
         fi
-    else
-        local claude_md_src="${project_root}/CLAUDE.md"
-        if [ -f "$claude_md_src" ]; then
-            local claude_md_dst="${task_dir}/CLAUDE.md"
-            generate_worktree_claude_md "$claude_md_src" "$claude_md_dst" "$task_name" "$task_dir" "$project_root"
-            log_info "  CLAUDE.md -> generated (with worktree context)"
-        fi
     fi
+
+    # Append worktree context to CLAUDE.local.md (single and multi repo).
+    # CLAUDE.md itself is left untouched (tracked copy / symlink to the original).
+    local claude_local_dst="${task_dir}/CLAUDE.local.md"
+    if ! write_worktree_context "$claude_local_dst" "$task_name" "$task_dir" "$project_root"; then
+        log_error "Failed to write worktree context to ${claude_local_dst}"
+        return 1
+    fi
+    log_info "  CLAUDE.local.md -> worktree context written"
 
     # .worktreerc hook
     local worktreerc="${project_root}/.worktreerc"

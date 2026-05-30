@@ -19,7 +19,7 @@ worktree create $ARGUMENTS
 1. Detects git repositories (single repo or multiple sub-repos)
 2. Runs `git fetch origin` on each repository
 3. Creates a worktree for each repository based on origin/HEAD (default branch)
-4. Generates CLAUDE.md with worktree context (task name, working directory, project root)
+4. Writes the worktree context (task name, working directory, project root) to CLAUDE.local.md, leaving the original CLAUDE.md untouched
 5. Symlinks non-git items into the task directory (multi-repo only)
 6. Copies `mise.toml` / `mise.local.toml` into each worktree (inherits mise version pinning even when gitignored)
 7. Executes `.worktreerc` `post_create()` hook if present
@@ -36,7 +36,8 @@ Worktrees are placed outside the project to avoid polluting code search:
 ├── my-project/                  # Original project (you are here)
 ├── my-project.worktrees/        # Created by this command
 │   └── <task-name>/
-│       ├── CLAUDE.md            # Generated with worktree context
+│       ├── CLAUDE.md            # Symlink to the original (unchanged)
+│       ├── CLAUDE.local.md      # Worktree context (added)
 │       ├── repo-a/  (branch: <task-name>)
 │       └── repo-b/  (branch: <task-name>)
 ```
@@ -48,7 +49,8 @@ Worktrees are placed outside the project to avoid polluting code search:
 ├── my-project/                  # Original project (you are here)
 ├── my-project.worktrees/
 │   └── <task-name>/             # Worktree (branch: <task-name>)
-│       ├── CLAUDE.md            # Generated with worktree context
+│       ├── CLAUDE.md            # Unchanged (no diff against the source)
+│       ├── CLAUDE.local.md      # Worktree context (added)
 │       └── src/
 ```
 

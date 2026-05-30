@@ -16,20 +16,40 @@ permissions:
 
 jobs:
   test-single-repo:
-    runs-on: ubuntu-latest
+    # Run on both Linux and macOS: macOS ships BSD userland (e.g. readlink
+    # without -f), so it guards against Linux-only assumptions in the scripts.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: true
+      - name: Install modern Bash (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install bash
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
       - name: Run single-repo tests
         run: ./test/bats/bin/bats test/single_repo.bats
 
   test-multi-repo:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: true
+      - name: Install modern Bash (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install bash
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
       - name: Run multi-repo tests
         run: ./test/bats/bin/bats test/multi_repo.bats
 

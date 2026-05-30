@@ -15,6 +15,21 @@ Git worktrees are great for parallel development — but managing them is painfu
 
 `worktree` solves this with one command: create isolated workspaces, run hooks, install deps, and clean up — across all repos at once.
 
+## Requirements
+
+- **`git`**
+- **Bash 4.0 or newer** — the scripts use associative arrays (`declare -A`).
+  - Linux distros ship Bash 4+/5 already.
+  - **macOS** ships Bash 3.2 as `/bin/bash`. Install a newer bash and make sure
+    it precedes `/bin` in `PATH`:
+
+    ```bash
+    brew install bash      # installs Bash 5 under $(brew --prefix)/bin
+    ```
+
+    The `worktree` shebang is `#!/usr/bin/env bash`, so the newer bash on `PATH`
+    is used automatically. Running under Bash 3.2 exits early with a clear error.
+
 ## Quick Start
 
 ```bash
@@ -46,7 +61,8 @@ worktree cleanup feature-login --force --delete-branches
 │   ├── feature-login/
 │   │   ├── frontend/               #   branch: feature-login
 │   │   ├── backend/                #   branch: feature-login
-│   │   └── CLAUDE.md               #   generated with worktree context
+│   │   ├── CLAUDE.md               #   symlink to the original (unchanged)
+│   │   └── CLAUDE.local.md         #   worktree context (never touches CLAUDE.md)
 │   └── fix-auth/
 │       └── ...
 ```
@@ -62,7 +78,8 @@ Works with **single-repo** projects too:
 ├── my-app.worktrees/
 │   └── feature-login/              # Worktree (branch: feature-login)
 │       ├── src/
-│       └── CLAUDE.md               #   generated with worktree context
+│       ├── CLAUDE.md               #   unchanged (no diff against the source)
+│       └── CLAUDE.local.md         #   worktree context (added, gitignore recommended)
 ```
 
 ## Commands
@@ -82,7 +99,7 @@ worktree create quick-test --no-install
 What happens:
 1. `git fetch origin` on each repo (also `git fetch upstream` if the remote exists)
 2. Create worktree based on the default branch — **`upstream` is preferred** over `origin` when both are configured (fork workflows where `origin` is your fork and `upstream` is the canonical repo)
-3. Generate `CLAUDE.md` with worktree context
+3. Write the worktree context to `CLAUDE.local.md` (the original `CLAUDE.md` is left untouched)
 4. Symlink non-git items (multi-repo)
 5. Copy `mise.toml` / `mise.local.toml` into each worktree (even when gitignored)
 6. Run `.worktreerc` `post_create()` hook

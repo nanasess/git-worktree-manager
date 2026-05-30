@@ -21,12 +21,19 @@ teardown_file() {
     git -C "$SINGLE_REPO_DIR" rev-parse --verify test-task
 }
 
-@test "create: CLAUDE.md includes Worktree Context" {
+@test "create: CLAUDE.local.md includes Worktree Context" {
+    [ -f "${WORKTREES_DIR}/test-task/CLAUDE.local.md" ]
+    grep -q "Worktree Context" "${WORKTREES_DIR}/test-task/CLAUDE.local.md"
+}
+
+@test "create: original CLAUDE.md is not modified with worktree context" {
+    # The worktree context goes to CLAUDE.local.md; a shipped CLAUDE.md must
+    # stay free of the injected block (no diff against the source).
     if [ ! -f "${SINGLE_REPO_DIR}/CLAUDE.md" ]; then
         skip "No CLAUDE.md"
     fi
-    [ -f "${WORKTREES_DIR}/test-task/CLAUDE.md" ]
-    grep -q "Worktree Context" "${WORKTREES_DIR}/test-task/CLAUDE.md"
+    run grep -q "Worktree Context" "${WORKTREES_DIR}/test-task/CLAUDE.md"
+    assert_failure
 }
 
 @test "create: duplicate task name fails" {

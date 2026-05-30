@@ -1,14 +1,39 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # worktree - Bulk git worktree management tool
 #
 # Manages worktree creation, listing, and deletion
 # across multiple git repositories under a project root.
 #
+# Requires Bash 4.0+ (associative arrays). macOS ships Bash 3.2, so the
+# shebang resolves bash via PATH; install a newer bash (e.g. `brew install
+# bash`) and make sure it precedes /bin in PATH.
+#
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+# Fail fast with a clear message on Bash < 4 (e.g. macOS system /bin/bash 3.2)
+# instead of a cryptic `declare: -A: invalid option` deeper in the run.
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+    echo "Error: worktree requires Bash 4.0 or newer (found ${BASH_VERSION})." >&2
+    echo "macOS ships Bash 3.2 as /bin/bash; install a newer bash and put it" >&2
+    echo "ahead of /bin in PATH, e.g.: brew install bash" >&2
+    exit 1
+fi
+
+# Resolve the real script directory, following symlinks (the recommended
+# install is a symlink in ~/.local/bin). Uses plain `readlink` so it works on
+# BSD/macOS too, where `readlink -f` is unavailable.
+SOURCE="$0"
+while [ -h "$SOURCE" ]; do
+    dir="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    case "$SOURCE" in
+        /*) ;;
+        *) SOURCE="$dir/$SOURCE" ;;
+    esac
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 # Load libraries
 source "$SCRIPT_DIR/lib/common.sh"

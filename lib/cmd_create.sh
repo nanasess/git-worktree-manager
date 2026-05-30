@@ -205,10 +205,11 @@ cmd_create() {
             local src="${project_root}/${item}"
             local dst="${task_dir}/${item}"
             if [ ! -e "$dst" ]; then
-                if [ "$item" = "CLAUDE.md" ]; then
-                    # Generate CLAUDE.md with worktree context
-                    generate_worktree_claude_md "$src" "$dst" "$task_name" "$task_dir" "$project_root"
-                    log_info "  ${item} -> generated (with worktree context)"
+                if [ "$item" = "CLAUDE.local.md" ]; then
+                    # Copy (not symlink) so the worktree context can be appended
+                    # without writing through to the project-root original.
+                    cp "$src" "$dst"
+                    log_info "  ${item} -> copied (from ${src})"
                 else
                     ln -sf "$src" "$dst"
                     log_info "  ${item} -> ${src}"
@@ -217,15 +218,14 @@ cmd_create() {
         done
     fi
 
-    # Single repo: add worktree context to CLAUDE.md
-    if is_single_repo; then
-        local claude_md_src="${project_root}/CLAUDE.md"
-        if [ -f "$claude_md_src" ]; then
-            local claude_md_dst="${task_dir}/CLAUDE.md"
-            generate_worktree_claude_md "$claude_md_src" "$claude_md_dst" "$task_name" "$task_dir" "$project_root"
-            log_info "  CLAUDE.md -> generated (with worktree context)"
-        fi
+    # Append worktree context to CLAUDE.local.md (single and multi repo).
+    # CLAUDE.md itself is left untouched (tracked copy / symlink to the original).
+    local claude_local_dst="${task_dir}/CLAUDE.local.md"
+    if ! write_worktree_context "$claude_local_dst" "$task_name" "$task_dir" "$project_root"; then
+        log_error "Failed to write worktree context to ${claude_local_dst}"
+        return 1
     fi
+    log_info "  CLAUDE.local.md -> worktree context written"
 
     # Copy mise config files (mise.toml, mise.local.toml) for each created worktree.
     # This inherits mise version pinning even when the config is gitignored.

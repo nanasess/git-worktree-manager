@@ -28,6 +28,34 @@ teardown_file() {
     git -C "${MULTI_REPO_DIR}/ecauth-auth-js" rev-parse --verify test-task
 }
 
+@test "create: CLAUDE.local.md includes Worktree Context" {
+    [ -f "${WORKTREES_DIR}/test-task/CLAUDE.local.md" ]
+    grep -q "Worktree Context" "${WORKTREES_DIR}/test-task/CLAUDE.local.md"
+}
+
+# A project-root CLAUDE.local.md must be copied (not symlinked) into the
+# worktree, preserved, and have the worktree context appended — while the
+# original stays untouched.
+@test "create: project-root CLAUDE.local.md is copied and original untouched" {
+    printf 'my local notes\n' > "${MULTI_REPO_DIR}/CLAUDE.local.md"
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" create local-task --no-install
+    assert_success
+
+    local wt="${WORKTREES_DIR}/local-task/CLAUDE.local.md"
+    [ -f "$wt" ]
+    [ ! -L "$wt" ]
+    grep -q "my local notes" "$wt"
+    grep -q "Worktree Context" "$wt"
+
+    # The project-root original must be left unchanged.
+    run grep -q "Worktree Context" "${MULTI_REPO_DIR}/CLAUDE.local.md"
+    assert_failure
+
+    "$WORKTREE_CMD" cleanup local-task --force --delete-branches
+    rm -f "${MULTI_REPO_DIR}/CLAUDE.local.md"
+}
+
 @test "create: --branch-prefix creates prefixed branches" {
     cd "$MULTI_REPO_DIR"
     run "$WORKTREE_CMD" create test-task2 --branch-prefix ci/ --no-install
