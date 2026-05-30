@@ -324,7 +324,10 @@ cmd_checkout_pr() {
     # Append worktree context to CLAUDE.local.md (single and multi repo).
     # CLAUDE.md itself is left untouched (tracked copy / symlink to the original).
     local claude_local_dst="${task_dir}/CLAUDE.local.md"
-    write_worktree_context "$claude_local_dst" "$task_name" "$task_dir" "$project_root"
+    if ! write_worktree_context "$claude_local_dst" "$task_name" "$task_dir" "$project_root"; then
+        log_error "Failed to write worktree context to ${claude_local_dst}"
+        return 1
+    fi
     log_info "  CLAUDE.local.md -> worktree context written"
 
     # .worktreerc hook
