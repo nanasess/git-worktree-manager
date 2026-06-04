@@ -55,9 +55,9 @@ teardown_file() {
     assert_success
 }
 
-@test "checkout main: exits 0" {
+@test "checkout master: exits 0" {
     cd "$SINGLE_REPO_DIR"
-    run "$WORKTREE_CMD" checkout main
+    run "$WORKTREE_CMD" checkout master
     assert_success
 }
 
@@ -107,6 +107,70 @@ teardown_file() {
     assert_success
     # No header, no dashes, no log_info — just the task name verbatim.
     [ "$output" = "feature/slash-test" ]
+}
+
+# switch: resolution prints the worktree path on stdout (the shell function
+# installed by `shell-init` is what turns that into a real `cd`).
+@test "switch: exact name resolves to worktree path" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" switch feature/slash-test
+    assert_success
+    assert_output "${WORKTREES_DIR}/feature/slash-test"
+}
+
+@test "switch: unique substring resolves to worktree path" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" switch slash
+    assert_success
+    assert_output "${WORKTREES_DIR}/feature/slash-test"
+}
+
+@test "switch: unknown name fails and lists available worktrees" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" switch no-such-worktree
+    assert_failure
+    assert_output --partial "No worktree matches: 'no-such-worktree'"
+    assert_output --partial "feature/slash-test"
+}
+
+@test "switch -: without shell integration fails with a hint" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" switch -
+    assert_failure
+    assert_output --partial "requires shell integration"
+}
+
+@test "shell-init: prints a worktree shell function" {
+    run "$WORKTREE_CMD" shell-init
+    assert_success
+    assert_output --partial "worktree()"
+    assert_output --partial "command worktree"
+    # The wrapper also intercepts create/checkout for auto-cd.
+    assert_output --partial "create|checkout|co"
+}
+
+# Auto-cd: create records the destination worktree in _WORKTREE_CD_FILE, which
+# the shell function reads to perform the cd. The binary itself never cd's.
+@test "create: records cd target when _WORKTREE_CD_FILE is set" {
+    cd "$SINGLE_REPO_DIR"
+    local cdfile
+    cdfile="$(mktemp)"
+    run env _WORKTREE_CD_FILE="$cdfile" "$WORKTREE_CMD" create cd-task --no-install
+    assert_success
+    [ "$(cat "$cdfile")" = "${WORKTREES_DIR}/cd-task" ]
+    rm -f "$cdfile"
+    "$WORKTREE_CMD" cleanup cd-task --force --delete-branches
+}
+
+@test "create --no-cd: does not record cd target" {
+    cd "$SINGLE_REPO_DIR"
+    local cdfile
+    cdfile="$(mktemp)"
+    run env _WORKTREE_CD_FILE="$cdfile" "$WORKTREE_CMD" create nocd-task --no-install --no-cd
+    assert_success
+    [ ! -s "$cdfile" ]
+    rm -f "$cdfile"
+    "$WORKTREE_CMD" cleanup nocd-task --force --delete-branches
 }
 
 @test "cleanup: accepts task names piped via stdin" {
@@ -209,7 +273,7 @@ teardown_file() {
 
 @test "checkout: --branch-prefix without value fails cleanly" {
     cd "$SINGLE_REPO_DIR"
-    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/issues/2 --branch-prefix
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-php/issues/2 --branch-prefix
     assert_failure
     assert_output --partial "--branch-prefix requires a value"
 }
@@ -223,7 +287,7 @@ teardown_file() {
 
 @test "checkout: issue URL creates issue-<N> worktree" {
     cd "$SINGLE_REPO_DIR"
-    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/issues/2 --no-install
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-php/issues/2 --no-install
     assert_success
 
     [ -d "${WORKTREES_DIR}/issue-2" ]
@@ -241,17 +305,17 @@ teardown_file() {
 
 @test "checkout: PR URL creates pr-<N> worktree on PR branch" {
     cd "$SINGLE_REPO_DIR"
-    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/pull/443 --no-install
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-php/pull/330 --no-install
     assert_success
 
-    [ -d "${WORKTREES_DIR}/pr-443" ]
-    [ -f "${WORKTREES_DIR}/pr-443/.git" ]
+    [ -d "${WORKTREES_DIR}/pr-330" ]
+    [ -f "${WORKTREES_DIR}/pr-330/.git" ]
     # Worktree must be on a named branch (not detached HEAD).
     # Branch name depends on gh availability:
     #   - With gh auth: the PR's original head ref (e.g., dependabot/...)
-    #   - Without gh (or gh unable to query): fallback "pr-443"
+    #   - Without gh (or gh unable to query): fallback "pr-330"
     local worktree_branch
-    worktree_branch=$(git -C "${WORKTREES_DIR}/pr-443" branch --show-current)
+    worktree_branch=$(git -C "${WORKTREES_DIR}/pr-330" branch --show-current)
     [ -n "$worktree_branch" ]
 }
 
@@ -263,10 +327,10 @@ teardown_file() {
 
 @test "cleanup: removes pr-<N> worktree" {
     cd "$SINGLE_REPO_DIR"
-    run "$WORKTREE_CMD" cleanup pr-443 --force --delete-branches
+    run "$WORKTREE_CMD" cleanup pr-330 --force --delete-branches
     assert_success
 
-    [ ! -d "${WORKTREES_DIR}/pr-443" ]
+    [ ! -d "${WORKTREES_DIR}/pr-330" ]
 }
 
 # Regression: stale local branch with PR head ref name must not be reused
@@ -274,31 +338,31 @@ teardown_file() {
     cd "$SINGLE_REPO_DIR"
     # Pre-create a local branch named after the PR's head ref, pointing at
     # an unrelated commit (master tip, which is NOT the PR head).
-    local pr_head_name="dependabot/npm_and_yarn/handlebars-4.7.9"
+    local pr_head_name="dependabot/github_actions/actions/checkout-6"
     git branch "$pr_head_name" master
 
-    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/pull/443 --no-install
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-php/pull/330 --no-install
     assert_success
 
     # Must have used the fallback name, not reused the stale branch
     local worktree_branch
-    worktree_branch=$(git -C "${WORKTREES_DIR}/pr-443" branch --show-current)
-    [ "$worktree_branch" = "pr-443" ]
+    worktree_branch=$(git -C "${WORKTREES_DIR}/pr-330" branch --show-current)
+    [ "$worktree_branch" = "pr-330" ]
 
     # Worktree must point at the PR head, not the stale local branch
     local worktree_sha stale_sha
-    worktree_sha=$(git -C "${WORKTREES_DIR}/pr-443" rev-parse HEAD)
+    worktree_sha=$(git -C "${WORKTREES_DIR}/pr-330" rev-parse HEAD)
     stale_sha=$(git -C "$SINGLE_REPO_DIR" rev-parse master)
     [ "$worktree_sha" != "$stale_sha" ]
 }
 
 @test "cleanup: removes fallback pr-<N> worktree" {
     cd "$SINGLE_REPO_DIR"
-    run "$WORKTREE_CMD" cleanup pr-443 --force --delete-branches
+    run "$WORKTREE_CMD" cleanup pr-330 --force --delete-branches
     assert_success
-    [ ! -d "${WORKTREES_DIR}/pr-443" ]
+    [ ! -d "${WORKTREES_DIR}/pr-330" ]
     # Clean up the stale branch that we created for the regression test
-    git -C "$SINGLE_REPO_DIR" branch -D "dependabot/npm_and_yarn/handlebars-4.7.9" 2>/dev/null || true
+    git -C "$SINGLE_REPO_DIR" branch -D "dependabot/github_actions/actions/checkout-6" 2>/dev/null || true
 }
 
 # Fork workflow: origin points at a fork, upstream points at the canonical repo.
@@ -306,24 +370,24 @@ teardown_file() {
 # and the subsequent PR fetch must also use 'upstream'.
 @test "checkout: PR URL matches a non-origin remote (upstream)" {
     cd "$SINGLE_REPO_DIR"
-    git -C "$SINGLE_REPO_DIR" remote set-url origin "https://github.com/fork-owner/setup-chromedriver.git"
-    git -C "$SINGLE_REPO_DIR" remote add upstream "https://github.com/nanasess/setup-chromedriver.git"
+    git -C "$SINGLE_REPO_DIR" remote set-url origin "https://github.com/fork-owner/setup-php.git"
+    git -C "$SINGLE_REPO_DIR" remote add upstream "https://github.com/nanasess/setup-php.git"
 
-    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-chromedriver/pull/443 --no-install
+    run "$WORKTREE_CMD" checkout https://github.com/nanasess/setup-php/pull/330 --no-install
     assert_success
     assert_output --partial "remote: upstream"
 
-    [ -d "${WORKTREES_DIR}/pr-443" ]
-    [ -f "${WORKTREES_DIR}/pr-443/.git" ]
+    [ -d "${WORKTREES_DIR}/pr-330" ]
+    [ -f "${WORKTREES_DIR}/pr-330/.git" ]
 }
 
 @test "cleanup: removes upstream-matched PR worktree and restores remotes" {
     cd "$SINGLE_REPO_DIR"
-    run "$WORKTREE_CMD" cleanup pr-443 --force --delete-branches
+    run "$WORKTREE_CMD" cleanup pr-330 --force --delete-branches
     assert_success
     # Restore remote configuration for subsequent tests (if any)
     git -C "$SINGLE_REPO_DIR" remote remove upstream 2>/dev/null || true
-    git -C "$SINGLE_REPO_DIR" remote set-url origin "https://github.com/nanasess/setup-chromedriver.git"
+    git -C "$SINGLE_REPO_DIR" remote set-url origin "https://github.com/nanasess/setup-php.git"
 }
 
 # When an 'upstream' remote exists, 'worktree create' must base the new
@@ -333,7 +397,7 @@ teardown_file() {
     # Simulate fork workflow by aliasing the same canonical URL as upstream.
     # Any valid fetchable URL works; using the same URL keeps the test offline-friendly
     # relative to other tests that already clone it.
-    git -C "$SINGLE_REPO_DIR" remote add upstream "https://github.com/nanasess/setup-chromedriver.git"
+    git -C "$SINGLE_REPO_DIR" remote add upstream "https://github.com/nanasess/setup-php.git"
 
     run "$WORKTREE_CMD" create upstream-base-task --no-install
     assert_success

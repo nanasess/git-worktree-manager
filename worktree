@@ -45,6 +45,7 @@ source "$SCRIPT_DIR/lib/cmd_cleanup.sh"
 source "$SCRIPT_DIR/lib/cmd_install.sh"
 source "$SCRIPT_DIR/lib/cmd_pull.sh"
 source "$SCRIPT_DIR/lib/cmd_checkout.sh"
+source "$SCRIPT_DIR/lib/cmd_switch.sh"
 
 VERSION="0.1.0"
 
@@ -59,8 +60,10 @@ usage() {
     echo "    list                  List current worktrees"
     echo "    cleanup [task-name]   Remove worktrees"
     echo "    checkout [branch|URL] Checkout a branch, or create a worktree from issue/PR URL"
+    echo "    switch [name|-]       cd into a worktree (needs shell-init)"
     echo "    pull                  Pull all repositories"
     echo "    install --skills      Install Claude Code skills"
+    echo "    shell-init            Print shell integration for 'switch'"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
     echo "    -h, --help            Show help"
@@ -91,6 +94,12 @@ main() {
             ;;
         checkout|co)
             cmd_checkout "$@"
+            ;;
+        switch|sw)
+            cmd_switch "$@"
+            ;;
+        shell-init)
+            cmd_shell_init "$@"
             ;;
         pull)
             cmd_pull "$@"

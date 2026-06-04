@@ -61,6 +61,48 @@ list_task_repo_dirs() {
     echo "${dirs[@]}"
 }
 
+# List all worktree task names, one per line, sorted and deduped.
+# Mirrors the discovery logic used by `worktree list` so that `switch` and
+# `list` always agree on the set of valid task names. Prints nothing when no
+# worktrees exist.
+#
+# The find depth/prune rationale is the same as in cmd_list: cap descent so we
+# do not walk into each worktree's working tree (node_modules, target, ...).
+list_all_task_names() {
+    local worktrees_base
+    worktrees_base="$(get_worktrees_base)"
+    [ -d "$worktrees_base" ] || return 0
+
+    local single=false
+    is_single_repo && single=true
+
+    local names=()
+    local git_marker
+    while IFS= read -r git_marker; do
+        local repo_dir="${git_marker%/*}"
+        local relative="${repo_dir#"$worktrees_base"/}"
+
+        local task_name
+        if [ "$single" = true ]; then
+            task_name="$relative"
+        else
+            task_name="${relative%/*}"
+        fi
+
+        local found=false existing
+        for existing in "${names[@]}"; do
+            if [ "$existing" = "$task_name" ]; then
+                found=true
+                break
+            fi
+        done
+        [ "$found" = false ] && names+=("$task_name")
+    done < <(find "$worktrees_base" -mindepth 2 -maxdepth 6 -name ".git" -prune -print 2>/dev/null | sort)
+
+    [ ${#names[@]} -eq 0 ] && return 0
+    printf '%s\n' "${names[@]}"
+}
+
 # Get the main (bare) repository path for a given worktree repo directory
 get_main_repo_path() {
     local repo_dir="$1"

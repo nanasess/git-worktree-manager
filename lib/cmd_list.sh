@@ -161,50 +161,12 @@ cmd_list() {
         return 0
     fi
 
-    # Search for git worktrees under worktrees_base.
-    # Supports slash in task names (e.g., feature/task-name).
-    # Uses mindepth 2 for single repo support (.git at depth 2).
-    #
-    # `-maxdepth` is critical for performance: without it, find descends into
-    # every worktree's working tree (node_modules, target, dist, etc.), which
-    # turns a sub-second listing into several seconds on real projects.
-    # The cap of 6 covers:
-    #   single repo, no slash:   <base>/<task>/.git                     -> depth 2
-    #   multi repo,  no slash:   <base>/<task>/<repo>/.git              -> depth 3
-    #   single repo, 1-slash:    <base>/<a>/<b>/.git                    -> depth 3
-    #   multi repo,  1-slash:    <base>/<a>/<b>/<repo>/.git             -> depth 4
-    #   multi repo,  2-slash:    <base>/<a>/<b>/<c>/<repo>/.git         -> depth 5
-    #   multi repo,  3-slash:    <base>/<a>/<b>/<c>/<d>/<repo>/.git     -> depth 6
-    # `-prune` is a safety net: should a `.git` directory (e.g. legacy clone
-    # or submodule layout) ever appear, we skip descending into its internals.
+    # Discover all worktree task names. Shared with `worktree switch` via
+    # list_all_task_names so the two commands always agree on the valid set.
     local task_names=()
-    while IFS= read -r git_marker; do
-        # git_marker is one of:
-        #   Multi repo: <worktrees_base>/<task_name>/<repo>/.git
-        #   Single repo: <worktrees_base>/<task_name>/.git
-        local repo_dir="${git_marker%/*}"
-        local relative="${repo_dir#"$worktrees_base"/}"
-
-        # Extract task name based on repo type
-        local task_name
-        if is_single_repo; then
-            task_name="$relative"
-        else
-            task_name="${relative%/*}"
-        fi
-
-        # Dedup
-        local found=false
-        for existing in "${task_names[@]}"; do
-            if [ "$existing" = "$task_name" ]; then
-                found=true
-                break
-            fi
-        done
-        if [ "$found" = false ]; then
-            task_names+=("$task_name")
-        fi
-    done < <(find "$worktrees_base" -mindepth 2 -maxdepth 6 -name ".git" -prune -print 2>/dev/null | sort)
+    while IFS= read -r task_name; do
+        [ -n "$task_name" ] && task_names+=("$task_name")
+    done < <(list_all_task_names)
 
     if [ ${#task_names[@]} -eq 0 ] && [ "$names_only" = false ]; then
         log_info "No worktrees found"

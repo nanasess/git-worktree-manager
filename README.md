@@ -37,12 +37,16 @@ Git worktrees are great for parallel development — but managing them is painfu
 git clone https://github.com/nanasess/git-worktree-manager.git ~/git-repos/git-worktree-manager
 ln -sf ~/git-repos/git-worktree-manager/worktree ~/.local/bin/worktree
 
+# Enable `worktree switch` (cd into worktrees) — add to ~/.zshrc or ~/.bashrc
+eval "$(worktree shell-init)"
+
 # Create worktrees for a task
 cd ~/git-repos/my-project
 worktree create feature-login
 
-# List, pull, checkout, cleanup
+# List, switch, pull, checkout, cleanup
 worktree list
+worktree switch feature-login   # cd into the worktree (needs shell-init)
 worktree pull
 worktree checkout main
 worktree cleanup feature-login --force --delete-branches
@@ -94,7 +98,13 @@ Creates a worktree (and branch) for each repository.
 worktree create feature-login
 worktree create fix-bug --branch-prefix nanasess/
 worktree create quick-test --no-install
+worktree create feature-login --no-cd   # don't auto-cd into the new worktree
 ```
+
+With [shell integration](#worktree-switch-name-) enabled, `create` automatically
+`cd`s into the new worktree on success (like worktrunk's `wt switch --create`).
+Use `--no-cd` to opt out. Without shell integration — or from a script / Claude
+subagent — no directory change happens.
 
 What happens:
 1. `git fetch origin` on each repo (also `git fetch upstream` if the remote exists)
@@ -109,6 +119,7 @@ What happens:
 |---|---|
 | `--branch-prefix <prefix>` | Prefix for branch names (e.g., `nanasess/`) |
 | `--no-install` | Skip dependency installation |
+| `--no-cd` | Do not auto-cd into the new worktree (needs shell integration) |
 
 ### `worktree list`
 
@@ -159,7 +170,41 @@ When given a **GitHub URL**, creates a worktree scoped to that issue/PR:
 
 For PR URLs in multi-repo projects, only the repository matching the URL gets a worktree (the PR is scoped to one repo).
 
+In URL mode, `checkout` also auto-`cd`s into the new worktree when [shell integration](#worktree-switch-name-) is enabled (pass `--no-cd` to opt out). Branch mode (`worktree checkout <branch>`) switches branches in place and never changes directory.
+
 The [`gh` CLI](https://cli.github.com/) is optional: with `gh`, PR URLs use the PR's original head branch name; without it, a generic `pr-<N>` branch name is used.
+
+### `worktree switch [name|-]`
+
+```bash
+worktree switch feature/foo-bar   # cd into the matching worktree
+worktree switch foo               # match by unique prefix/substring
+worktree switch -                 # cd back to the previous worktree
+worktree switch                   # pick interactively (fzf), or list names
+worktree sw foo                   # alias
+```
+
+`switch` changes your shell's current directory to a worktree under
+`<project>.worktrees/`. `<name>` is matched against worktree task names with the
+precedence **exact > unique prefix > unique substring**; an ambiguous query
+prints the candidates and exits non-zero.
+
+Because a child process cannot change its parent shell's directory, `switch`
+requires **shell integration**. Add this to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+eval "$(worktree shell-init)"
+```
+
+This installs a `worktree` shell function that wraps the binary: for `switch`
+it captures the resolved path and runs `cd`; every other subcommand is passed
+through unchanged. Without it, `worktree switch <name>` just prints the resolved
+path (and a hint) instead of changing directory.
+
+`switch -` toggles back to the directory you were in before the last switch
+(like `cd -`, but scoped to worktree switches). With no argument, `switch` opens
+an [`fzf`](https://github.com/junegunn/fzf) picker when one is available and a
+terminal is attached; otherwise it prints the list of worktree names.
 
 ### `worktree pull`
 
