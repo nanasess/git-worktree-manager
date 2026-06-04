@@ -109,6 +109,70 @@ teardown_file() {
     [ "$output" = "feature/slash-test" ]
 }
 
+# switch: resolution prints the worktree path on stdout (the shell function
+# installed by `shell-init` is what turns that into a real `cd`).
+@test "switch: exact name resolves to worktree path" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" switch feature/slash-test
+    assert_success
+    assert_output "${WORKTREES_DIR}/feature/slash-test"
+}
+
+@test "switch: unique substring resolves to worktree path" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" switch slash
+    assert_success
+    assert_output "${WORKTREES_DIR}/feature/slash-test"
+}
+
+@test "switch: unknown name fails and lists available worktrees" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" switch no-such-worktree
+    assert_failure
+    assert_output --partial "No worktree matches: 'no-such-worktree'"
+    assert_output --partial "feature/slash-test"
+}
+
+@test "switch -: without shell integration fails with a hint" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" switch -
+    assert_failure
+    assert_output --partial "requires shell integration"
+}
+
+@test "shell-init: prints a worktree shell function" {
+    run "$WORKTREE_CMD" shell-init
+    assert_success
+    assert_output --partial "worktree()"
+    assert_output --partial "command worktree"
+    # The wrapper also intercepts create/checkout for auto-cd.
+    assert_output --partial "create|checkout|co"
+}
+
+# Auto-cd: create records the destination worktree in _WORKTREE_CD_FILE, which
+# the shell function reads to perform the cd. The binary itself never cd's.
+@test "create: records cd target when _WORKTREE_CD_FILE is set" {
+    cd "$SINGLE_REPO_DIR"
+    local cdfile
+    cdfile="$(mktemp)"
+    run env _WORKTREE_CD_FILE="$cdfile" "$WORKTREE_CMD" create cd-task --no-install
+    assert_success
+    [ "$(cat "$cdfile")" = "${WORKTREES_DIR}/cd-task" ]
+    rm -f "$cdfile"
+    "$WORKTREE_CMD" cleanup cd-task --force --delete-branches
+}
+
+@test "create --no-cd: does not record cd target" {
+    cd "$SINGLE_REPO_DIR"
+    local cdfile
+    cdfile="$(mktemp)"
+    run env _WORKTREE_CD_FILE="$cdfile" "$WORKTREE_CMD" create nocd-task --no-install --no-cd
+    assert_success
+    [ ! -s "$cdfile" ]
+    rm -f "$cdfile"
+    "$WORKTREE_CMD" cleanup nocd-task --force --delete-branches
+}
+
 @test "cleanup: accepts task names piped via stdin" {
     cd "$SINGLE_REPO_DIR"
     # Use --dry-run so the slash-task is still around for the next test.

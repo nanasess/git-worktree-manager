@@ -42,7 +42,20 @@ worktree checkout           # default branch
 worktree checkout https://github.com/owner/repo/issues/42
 worktree checkout https://github.com/owner/repo/pull/123
 worktree checkout https://github.com/owner/repo/pull/123 --no-install
+worktree checkout https://github.com/owner/repo/pull/123 --no-cd
 ```
+
+## Options (URL mode)
+
+| Option | Description |
+|---|---|
+| `--no-install` | Skip automatic dependency installation |
+| `--no-cd` | Do not auto-cd into the new worktree (interactive shells with `worktree shell-init` only) |
+
+> **Note (subagents):** In URL mode, `checkout` auto-cds into the new worktree
+> only in an interactive shell that has `eval "$(worktree shell-init)"` installed.
+> From a subagent's `Bash` call there is no directory change, so `--no-cd` has no
+> effect here. Branch mode never changes directory.
 
 ## Alias
 

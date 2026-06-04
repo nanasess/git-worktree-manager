@@ -25,15 +25,17 @@ ln -sf ~/git-repos/git-worktree-manager/worktree ~/.local/bin/worktree
 ## コマンド
 
 ```bash
-worktree create <task-name> [--branch-prefix <prefix>] [--no-install]
+worktree create <task-name> [--branch-prefix <prefix>] [--no-install] [--no-cd]
 worktree list [--merged] [--names-only]
 worktree cleanup <task-name> [--force] [--delete-branches]
 worktree cleanup --merged [--force] [--delete-branches] [--dry-run]
 worktree cleanup [--force] [--delete-branches] < <(task-name-source)
 worktree checkout [branch]
-worktree checkout <issue-or-pr-URL> [--no-install]
+worktree checkout <issue-or-pr-URL> [--no-install] [--no-cd]
+worktree switch [name|-]
 worktree pull
 worktree install --skills [--global]
+worktree shell-init
 ```
 
 `worktree list --merged --names-only` の出力は `worktree cleanup` の stdin にそのままパイプ可能 (1 行 1 task name)。マージ済み worktree をまとめて削除する用途で使う。`list --merged` は any-merged (1 つでもマージ済み sub-repo を含む) 判定で、`cleanup --merged` の all-merged 判定とは仕様が異なるため、パイプ削除時は未マージ sub-repo まで巻き込んで消える点に注意。
@@ -45,6 +47,32 @@ worktree install --skills [--global]
 - `gh` CLI はオプション: 無ければ Issue 検証をスキップし、PR はブランチ名を `pr-<N>` にフォールバック
 
 すべてのコマンドはプロジェクトルートまたは `.worktrees/` ディレクトリ内から実行可能。
+
+## worktree switch とシェル統合
+
+`worktree switch [name|-]` は worktree ディレクトリへ `cd` するためのコマンド。worktrunk の `wt switch` 相当。
+
+**根本的な制約**: `worktree` は別プロセスなので、子プロセスから親シェルの CWD は変更できない。そのため `switch` 単体では `cd` できず、**シェル統合が必須**。
+
+- バイナリ側の `worktree switch <name>` は、名前を解決した**絶対パスを stdout に出力するだけ**。ログ・エラー・fzf UI・ヒントはすべて stderr へ流し、stdout を解決パス専用に保つ。
+- `eval "$(worktree shell-init)"` を `~/.zshrc` / `~/.bashrc` に追加すると、`worktree` がシェル関数になる。`switch` / `sw` のときだけ出力パスを受けて `cd` し、それ以外のサブコマンドは `command worktree` にそのまま委譲する。bash / zsh 両対応。
+- 名前マッチングの優先順位は **完全一致 > 一意な prefix > 一意な substring**。あいまいな場合は候補を stderr に出して非ゼロ終了。
+- マルチリポではタスクディレクトリ (worktree のプロジェクトルート) へ `cd` する (個別の sub-repo ではない)。
+- `switch -` は直前にいたディレクトリへトグル (`cd -` 相当だが switch 間スコープ)。シェル関数内の `_WORKTREE_PREV` で追跡するため、バイナリ単体に `-` を渡すとシェル統合を案内して非ゼロ終了する。
+- 引数なしは `fzf` があり端末が接続されていればインタラクティブ選択、無ければ worktree 名一覧を表示。
+- シェル統合なしで `worktree switch <name>` を実行した場合は解決パスを表示するだけ (cd はしない)。`_WORKTREE_SHELL_WRAPPED` が未設定かつ stdout が端末のときは統合を促すヒントを stderr に出す。
+- 実装は `lib/cmd_switch.sh` の `cmd_switch` (解決) / `cmd_shell_init` (シェル関数出力) / `resolve_task_name` (名前マッチング) と、`lib/detect.sh` の `list_all_task_names` (タスク名列挙、`list` と共有) に集約。
+
+`switch` は人間がシェルで `cd` するためのコマンドで、サブエージェント (Bash 呼び出しごとに CWD が独立) には適さないため、Claude Code 用の Skill は提供しない。
+
+### create / checkout 後の自動 cd
+
+シェル統合が有効な対話シェルでは、`worktree create` および `worktree checkout <URL>` の成功後、新しい worktree へ**自動的に `cd`** する (worktrunk の `wt switch --create` 相当の UX)。`--no-cd` で無効化できる (オプトアウト方式)。
+
+- `create` / `checkout` は進捗ログを大量に stdout へ出すため、switch のような「stdout=パス」方式は使えない。代わりにシェル関数が一時ファイルを `_WORKTREE_CD_FILE` で渡し、ログは通常どおり画面に流しつつ、バイナリは**成功時に最終 task ディレクトリだけをそのファイルへ書き込む** (`common.sh` の `write_cd_target`)。関数が読んで `cd` する。
+- `_WORKTREE_CD_FILE` が未設定のとき `write_cd_target` は no-op。したがって**シェル統合なしの直接実行・サブエージェントの Bash 呼び出しでは一切 cd しない** (既存挙動を完全維持)。自動 cd が効くのは `shell-init` を入れた対話シェルだけ。
+- `checkout <branch>` (URL でないブランチ切替) は新ディレクトリを作らないので cd しない。issue URL は `cmd_create` 経由、PR URL は `cmd_checkout_pr` 末尾で `write_cd_target` を呼ぶ。
+- 自動 cd 後は `_WORKTREE_PREV` に元のディレクトリが入るため、`worktree switch -` で作成前の場所へ戻れる。
 
 ## base branch の決定ロジック
 

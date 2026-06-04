@@ -128,6 +128,20 @@ Run \`docker compose up\` or other commands within this directory (\`${task_dir}
 WORKTREE_CONTEXT
 }
 
+# Record the directory the shell-integration wrapper should cd into after a
+# create / checkout completes. The `worktree` shell function (from
+# `worktree shell-init`) passes a writable path via _WORKTREE_CD_FILE and, on
+# return, cd's into whatever was written. This is a no-op when the env var is
+# unset — i.e. run directly without shell integration, or from a subagent's
+# Bash call — so non-interactive callers never have their directory changed.
+# Usage: write_cd_target <dir>
+write_cd_target() {
+    local dir="$1"
+    [ -n "${_WORKTREE_CD_FILE:-}" ] || return 0
+    [ -n "$dir" ] || return 0
+    printf '%s\n' "$dir" > "$_WORKTREE_CD_FILE" 2>/dev/null || true
+}
+
 # Copy mise config files (mise.toml, mise.local.toml) from source to destination.
 # Skips files that do not exist in the source, or already exist in the destination
 # (git worktree add already provides tracked copies).

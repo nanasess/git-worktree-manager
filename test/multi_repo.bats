@@ -78,6 +78,32 @@ teardown_file() {
     assert_output --partial "test-task2"
 }
 
+# switch: in a multi-repo project, resolution lands on the task directory
+# (the worktree's project root), not on an individual sub-repo.
+@test "switch: resolves to the task directory in a multi-repo project" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" switch test-task
+    assert_success
+    assert_output "${WORKTREES_DIR}/test-task"
+}
+
+@test "switch: unique substring resolves to the task directory" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" switch task2
+    assert_success
+    assert_output "${WORKTREES_DIR}/test-task2"
+}
+
+@test "switch: ambiguous name fails and lists candidates" {
+    cd "$MULTI_REPO_DIR"
+    # 'test' is a prefix of both test-task and test-task2 -> ambiguous.
+    run "$WORKTREE_CMD" switch test
+    assert_failure
+    assert_output --partial "Ambiguous worktree name: 'test'"
+    assert_output --partial "test-task"
+    assert_output --partial "test-task2"
+}
+
 @test "pull: exits 0" {
     cd "$MULTI_REPO_DIR"
     run "$WORKTREE_CMD" pull

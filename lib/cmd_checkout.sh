@@ -17,6 +17,7 @@ cmd_checkout_usage() {
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
     echo "    --no-install  (URL mode) Skip automatic dependency installation"
+    echo "    --no-cd       (URL mode) Do not cd into the new worktree (shell integration)"
     echo "    -h, --help    Show help"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
@@ -164,9 +165,11 @@ cmd_checkout_pr() {
 
     # Parse passthrough options
     local no_install=false
+    local no_cd=false
     while [ $# -gt 0 ]; do
         case "$1" in
             --no-install) no_install=true ;;
+            --no-cd) no_cd=true ;;
             --branch-prefix)
                 # Ignored for PR mode: the branch name comes from the PR head.
                 # Consume the value too, but guard against it being missing.
@@ -365,6 +368,12 @@ cmd_checkout_pr() {
 
     echo ""
     log_success "PR #${pr_number} (${head_ref}) checked out at ${worktree_path}"
+
+    # Tell the shell-integration wrapper to cd into the new worktree (unless
+    # --no-cd). Lands on the task directory, consistent with `create`/`switch`.
+    if [ "$no_cd" = false ]; then
+        write_cd_target "$task_dir"
+    fi
     echo ""
 }
 
@@ -379,7 +388,7 @@ cmd_checkout() {
                 cmd_checkout_usage
                 return 0
                 ;;
-            --no-install)
+            --no-install|--no-cd)
                 passthrough+=("$1")
                 ;;
             --branch-prefix)

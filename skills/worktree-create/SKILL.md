@@ -1,7 +1,7 @@
 ---
 name: worktree-create
 description: Create git worktrees for a task across all repositories in the project. Use when starting parallel work, creating isolated workspaces for subagents, or branching all repos at once.
-argument-hint: <task-name> [--branch-prefix <prefix>] [--no-install]
+argument-hint: <task-name> [--branch-prefix <prefix>] [--no-install] [--no-cd]
 disable-model-invocation: true
 allowed-tools: Bash(worktree create *)
 ---
@@ -67,3 +67,10 @@ The task directory path is printed at the end. Use it to:
 |---|---|
 | `--branch-prefix <prefix>` | Add a prefix to branch names (e.g. `nanasess/`) |
 | `--no-install` | Skip automatic dependency installation |
+| `--no-cd` | Do not auto-cd into the new worktree (interactive shells with `worktree shell-init` only) |
+
+> **Note (subagents):** Auto-cd only happens in an interactive shell that has
+> `eval "$(worktree shell-init)"` installed. From a subagent's `Bash` call there
+> is no directory change (each `Bash` call has its own working directory), so
+> `--no-cd` has no effect here. Use the task directory printed at the end and
+> pass it to subagents via `--add-dir`.

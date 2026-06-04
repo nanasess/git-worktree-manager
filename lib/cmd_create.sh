@@ -12,6 +12,7 @@ cmd_create_usage() {
     echo -e "${BOLD}OPTIONS:${NC}"
     echo "    --branch-prefix <prefix>  Add a prefix to branch names"
     echo "    --no-install              Skip automatic dependency installation"
+    echo "    --no-cd                   Do not cd into the new worktree (shell integration)"
     echo "    -h, --help                Show help"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
@@ -24,6 +25,7 @@ cmd_create() {
     local task_name=""
     local branch_prefix=""
     local no_install=false
+    local no_cd=false
 
     # Parse options
     while [ $# -gt 0 ]; do
@@ -39,6 +41,9 @@ cmd_create() {
                 ;;
             --no-install)
                 no_install=true
+                ;;
+            --no-cd)
+                no_cd=true
                 ;;
             -h|--help)
                 cmd_create_usage
@@ -285,5 +290,11 @@ cmd_create() {
     print_summary RESULTS "${display_repos[@]}"
 
     log_success "Task directory: ${task_dir}"
+
+    # Tell the shell-integration wrapper to cd into the new worktree (unless
+    # --no-cd). Only when at least one worktree was actually created.
+    if [ "$no_cd" = false ] && [ ${#created_repos[@]} -gt 0 ]; then
+        write_cd_target "$task_dir"
+    fi
     echo ""
 }
