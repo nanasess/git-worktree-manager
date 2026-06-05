@@ -80,6 +80,14 @@ worktree shell-init
 
 `worktree checkout` (引数なし / branch 指定) は既存 local ブランチを切り替えるだけなので、upstream の追従はユーザ側で `git pull upstream <branch>` する想定 (local commit を破壊しないため意図的に手動)。
 
+### `<remote>/HEAD` キャッシュの鮮度 (issue #23)
+
+base branch の検出 (`detect_remote_default_branch`) はローカルにキャッシュされた `<remote>/HEAD` シンボリック参照を読む。しかし `git fetch <remote>` はこの参照を更新しないため、**リモートのデフォルトブランチが変更されても古い値が残り続け**、誤ったベースブランチで worktree が作られていた。
+
+- `worktree create` / `checkout <PR URL>` は fetch 直後に `git remote set-head <remote> --auto` (`lib/detect.sh` の `refresh_remote_head`) を呼び、`<remote>/HEAD` を最新化してから base branch を決める。
+- `refresh_remote_head` は **ネットワークアクセスを伴う** ため、fetch 済みコンテキスト (create/checkout) からのみ呼ぶ。`cleanup --merged` はオフライン実行を許容する設計なので**意図的に refresh しない** (キャッシュ依存のまま)。
+- `detect_remote_default_branch` 自体は読み取り専用 (ネットワークなし) を維持する。
+
 ## worktree 配置構造
 
 worktree はプロジェクトの隣に `<project>.worktrees/` として配置されます（リポジトリ内にはノイズが入らない）。

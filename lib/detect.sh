@@ -164,9 +164,27 @@ list_non_git_items() {
     echo "${items[@]}"
 }
 
+# Refresh the cached <remote>/HEAD symbolic ref from the remote.
+#
+# `git fetch` does NOT update <remote>/HEAD, so once it is set the cached value
+# survives even after the remote's default branch changes. This refreshes it via
+# `git remote set-head <remote> --auto`, which queries the remote — a NETWORK
+# operation. Call it only from a fetch context (create/checkout), never from
+# offline-capable paths like cleanup. Best-effort: failures are ignored so the
+# caller falls back to the existing cached value / main/master heuristics.
+refresh_remote_head() {
+    local repo_path="$1"
+    local remote="$2"
+    git -C "$repo_path" remote set-head "$remote" --auto >/dev/null 2>&1 || true
+}
+
 # Detect the default branch of a specific remote (from <remote>/HEAD).
 # Stdout on success: branch name (e.g., "main").
 # Returns 1 if detection fails.
+#
+# This is read-only by design (no network): it trusts the cached <remote>/HEAD
+# when present. Callers in a fetch context should call refresh_remote_head first
+# to avoid a stale cache (see issue #23).
 detect_remote_default_branch() {
     local repo_path="$1"
     local remote="$2"
