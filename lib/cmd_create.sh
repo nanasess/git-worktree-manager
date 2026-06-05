@@ -152,6 +152,9 @@ cmd_create() {
         if [ "$fetch_status" -ne 0 ] && [ "$fetch_status" -ne 141 ]; then
             log_warn "  Fetch failed (continuing)"
         fi
+        # Refresh origin/HEAD so a remote default-branch change is picked up.
+        # `git fetch` alone does not update it (issue #23).
+        refresh_remote_head "$repo_path" origin
 
         # In fork workflows, also fetch upstream so its default branch is up to date
         if git -C "$repo_path" remote get-url upstream >/dev/null 2>&1; then
@@ -161,6 +164,8 @@ cmd_create() {
             if [ "$upstream_fetch_status" -ne 0 ] && [ "$upstream_fetch_status" -ne 141 ]; then
                 log_warn "  Fetch upstream failed (continuing)"
             fi
+            # Same refresh for upstream/HEAD (the preferred base in fork workflows).
+            refresh_remote_head "$repo_path" upstream
         fi
 
         # Detect base remote (prefers upstream when present) and default branch

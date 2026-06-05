@@ -423,3 +423,29 @@ teardown_file() {
     assert_success
     git -C "$SINGLE_REPO_DIR" remote remove upstream 2>/dev/null || true
 }
+
+# Regression for issue #23: a stale origin/HEAD (pointing at a non-default
+# branch) must be refreshed before the base branch is chosen, so the worktree
+# is created from the remote's *current* default — not the cached value.
+@test "create: refreshes stale origin/HEAD before basing worktree" {
+    cd "$SINGLE_REPO_DIR"
+    # Poison the cached symref to point at a non-default branch (v4 exists on the
+    # remote but is not the default; symbolic-ref does not verify the target).
+    git -C "$SINGLE_REPO_DIR" symbolic-ref \
+        refs/remotes/origin/HEAD refs/remotes/origin/v4
+
+    run "$WORKTREE_CMD" create stale-head-task --no-install
+    assert_success
+    # After refresh, the real default (master) is used, not the stale v4.
+    assert_output --partial "Base branch: origin/master"
+    refute_output --partial "Base branch: origin/v4"
+
+    [ -d "${WORKTREES_DIR}/stale-head-task" ]
+    git -C "$SINGLE_REPO_DIR" rev-parse --verify stale-head-task
+}
+
+@test "cleanup: removes stale-head worktree" {
+    cd "$SINGLE_REPO_DIR"
+    run "$WORKTREE_CMD" cleanup stale-head-task --force --delete-branches
+    assert_success
+}

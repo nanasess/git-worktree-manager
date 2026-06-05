@@ -241,6 +241,9 @@ cmd_checkout_pr() {
         log_error "Failed to fetch PR #${pr_number}"
         return 1
     fi
+    # Refresh <remote>/HEAD so the default-branch collision check below uses the
+    # remote's current default, not a stale cache (issue #23).
+    refresh_remote_head "$matching_repo_path" "$matching_remote"
 
     # Decide the local branch name. Prefer the PR head ref, but fall back to
     # "pr-<N>" when the head ref collides with protected/existing branches.
