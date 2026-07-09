@@ -174,20 +174,43 @@ In URL mode, `checkout` also auto-`cd`s into the new worktree when [shell integr
 
 The [`gh` CLI](https://cli.github.com/) is optional: with `gh`, PR URLs use the PR's original head branch name; without it, a generic `pr-<N>` branch name is used.
 
-### `worktree switch [name|-]`
+### `worktree switch [name|branch|URL|-]`
 
 ```bash
 worktree switch feature/foo-bar   # cd into the matching worktree
 worktree switch foo               # match by unique prefix/substring
+worktree switch nanasess/fix-bug  # match by the checked-out branch name
+worktree switch https://github.com/EC-CUBE/ec-cube/pull/1234    # by PR URL
+worktree switch https://github.com/EC-CUBE/ec-cube/issues/1234  # by issue URL
 worktree switch -                 # cd back to the previous worktree
 worktree switch                   # pick interactively (fzf), or list names
 worktree sw foo                   # alias
 ```
 
 `switch` changes your shell's current directory to a worktree under
-`<project>.worktrees/`. `<name>` is matched against worktree task names with the
-precedence **exact > unique prefix > unique substring**; an ambiguous query
-prints the candidates and exits non-zero.
+`<project>.worktrees/`. It exists to solve a real problem: once you have dozens
+of worktrees (`pr-*`, `issue-*`, and `create`d feature branches side by side),
+finding the one that belongs to a given PR, issue, or branch by directory name
+alone is impractical. `switch` accepts the identifier you already have.
+
+A **non-URL query** is matched with the precedence **exact task name > exact
+branch name > unique prefix > unique substring**; an ambiguous query prints the
+candidates and exits non-zero. The branch step matters when the task directory
+is not named after the branch — e.g. a worktree created with `--branch-prefix`
+(task `fix-bug`, branch `nanasess/fix-bug`) or a PR checkout (task `pr-<N>`,
+branch = the PR head ref).
+
+A **GitHub URL** is resolved to the right worktree (`gh` recommended):
+
+| URL | Resolves to |
+|---|---|
+| `.../pull/<N>` | the worktree checked out on the PR head branch (found via `gh`); otherwise the `pr-<N>` task from `checkout` |
+| `.../issues/<N>` | the `issue-<N>` task from `checkout`; otherwise a worktree linked to the issue by a closing PR (`closes #N`) or a `gh issue develop` branch |
+
+This means a PR URL lands on the original feature worktree the PR was opened
+from — not only on a `pr-<N>` checkout — and an issue URL can walk through its
+linked PR to the feature branch's worktree. Without `gh` the URL forms fall back
+to the `pr-<N>` / `issue-<N>` naming conventions only.
 
 Because a child process cannot change its parent shell's directory, `switch`
 requires **shell integration**. Add this to your `~/.zshrc` or `~/.bashrc`:
