@@ -104,6 +104,49 @@ teardown_file() {
     assert_output --partial "test-task2"
 }
 
+# switch by branch name: test-task2 was created with --branch-prefix ci/, so
+# its branch is 'ci/test-task2' while its task directory is 'test-task2'. The
+# exact branch name must resolve to the task directory even though it is not a
+# task name (nor a substring of one).
+@test "switch: exact branch name resolves to the task directory" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" switch ci/test-task2
+    assert_success
+    assert_output "${WORKTREES_DIR}/test-task2"
+}
+
+@test "switch: unknown branch/name fails and lists available worktrees" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" switch feature/nonexistent
+    assert_failure
+    assert_output --partial "No worktree matches: 'feature/nonexistent'"
+}
+
+# switch by GitHub issue URL maps to the 'issue-<N>' task naming convention.
+@test "switch: issue URL resolves to the issue-<N> task directory" {
+    cd "$MULTI_REPO_DIR"
+    # Create the worktree the issue URL is expected to resolve to.
+    "$WORKTREE_CMD" create issue-4242 --no-install
+    run "$WORKTREE_CMD" switch https://github.com/EcAuth/EcAuth/issues/4242
+    assert_success
+    assert_output "${WORKTREES_DIR}/issue-4242"
+    "$WORKTREE_CMD" cleanup issue-4242 --force --delete-branches
+}
+
+@test "switch: issue URL with no matching worktree fails" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" switch https://github.com/EcAuth/EcAuth/issues/999999
+    assert_failure
+    assert_output --partial "No worktree found for issue #999999"
+}
+
+@test "switch: non-GitHub URL is rejected" {
+    cd "$MULTI_REPO_DIR"
+    run "$WORKTREE_CMD" switch https://example.com/foo/bar
+    assert_failure
+    assert_output --partial "Invalid GitHub URL"
+}
+
 @test "pull: exits 0" {
     cd "$MULTI_REPO_DIR"
     run "$WORKTREE_CMD" pull

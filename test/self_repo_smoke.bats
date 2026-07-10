@@ -96,6 +96,22 @@ require_gh_for_self_repo() {
     refute_output --partial "[merged]"
 }
 
+# switch <PR URL> resolves through the PR head branch: gh reports the head ref
+# (issue-12), which is the branch checked out in the pr-<N> worktree, so the
+# URL lands on that task directory even though the task is named "pr-<N>".
+@test "switch: self-repo PR URL resolves via head branch to pr-<N>" {
+    require_gh_for_self_repo
+
+    # Depends on the earlier checkout having created pr-${SELF_PR_NUMBER}.
+    [ -d "${WORKTREES_DIR}/pr-${SELF_PR_NUMBER}/git-worktree-manager" ]
+
+    cd "$PROJECT_DIR"
+    run "$WORKTREE_CMD" switch \
+        "https://github.com/nanasess/git-worktree-manager/pull/${SELF_PR_NUMBER}"
+    assert_success
+    assert_output "${WORKTREES_DIR}/pr-${SELF_PR_NUMBER}"
+}
+
 @test "cleanup: removes self-repo PR worktree" {
     require_gh_for_self_repo
 

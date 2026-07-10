@@ -32,7 +32,7 @@ worktree cleanup --merged [--force] [--delete-branches] [--dry-run]
 worktree cleanup [--force] [--delete-branches] < <(task-name-source)
 worktree checkout [branch]
 worktree checkout <issue-or-pr-URL> [--no-install] [--no-cd]
-worktree switch [name|-]
+worktree switch [name|branch|URL|-]
 worktree pull
 worktree install --skills [--global]
 worktree shell-init
@@ -50,18 +50,21 @@ worktree shell-init
 
 ## worktree switch とシェル統合
 
-`worktree switch [name|-]` は worktree ディレクトリへ `cd` するためのコマンド。worktrunk の `wt switch` 相当。
+`worktree switch [name|branch|URL|-]` は worktree ディレクトリへ `cd` するためのコマンド。worktrunk の `wt switch` 相当。大量の worktree (`pr-*` / `issue-*` / `create` した feature ブランチが混在) から、手元にある識別子 (タスク名・ブランチ名・PR/Issue URL) で目的の worktree を引ける点が主眼。
 
 **根本的な制約**: `worktree` は別プロセスなので、子プロセスから親シェルの CWD は変更できない。そのため `switch` 単体では `cd` できず、**シェル統合が必須**。
 
 - バイナリ側の `worktree switch <name>` は、名前を解決した**絶対パスを stdout に出力するだけ**。ログ・エラー・fzf UI・ヒントはすべて stderr へ流し、stdout を解決パス専用に保つ。
 - `eval "$(worktree shell-init)"` を `~/.zshrc` / `~/.bashrc` に追加すると、`worktree` がシェル関数になる。`switch` / `sw` のときだけ出力パスを受けて `cd` し、それ以外のサブコマンドは `command worktree` にそのまま委譲する。bash / zsh 両対応。
-- 名前マッチングの優先順位は **完全一致 > 一意な prefix > 一意な substring**。あいまいな場合は候補を stderr に出して非ゼロ終了。
+- 非 URL クエリのマッチング優先順位は **タスク名の完全一致 > ブランチ名の完全一致 > 一意な prefix > 一意な substring**。あいまいな場合は候補を stderr に出して非ゼロ終了。ブランチ名一致は「タスク名 ≠ ブランチ名」のケース (`--branch-prefix` 付き作成、`pr-<N>` タスクで branch が PR head ref) を救う。
+- GitHub URL は番号・ブランチ経由で解決 (`gh` 推奨、無ければ命名規約のみにフォールバック):
+  - **PR URL** (`.../pull/<N>`): `gh pr view` で head ブランチを取得し、そのブランチを checkout している worktree へ。無ければ `checkout` 由来の `pr-<N>` タスクへ。→ PR を切った元の feature worktree にも着地できる。
+  - **Issue URL** (`.../issues/<N>`): まず `checkout` 由来の `issue-<N>` タスク。無ければ、その issue を close する PR (`closes #N`、`closedByPullRequestsReferences`) や `gh issue develop` で紐付けたブランチを辿って対応 worktree へ。複数該当時は候補コマンドを stderr に列挙して非ゼロ終了 (自動選択しない)。
 - マルチリポではタスクディレクトリ (worktree のプロジェクトルート) へ `cd` する (個別の sub-repo ではない)。
 - `switch -` は直前にいたディレクトリへトグル (`cd -` 相当だが switch 間スコープ)。シェル関数内の `_WORKTREE_PREV` で追跡するため、バイナリ単体に `-` を渡すとシェル統合を案内して非ゼロ終了する。
 - 引数なしは `fzf` があり端末が接続されていればインタラクティブ選択、無ければ worktree 名一覧を表示。
 - シェル統合なしで `worktree switch <name>` を実行した場合は解決パスを表示するだけ (cd はしない)。`_WORKTREE_SHELL_WRAPPED` が未設定かつ stdout が端末のときは統合を促すヒントを stderr に出す。
-- 実装は `lib/cmd_switch.sh` の `cmd_switch` (解決) / `cmd_shell_init` (シェル関数出力) / `resolve_task_name` (名前マッチング) と、`lib/detect.sh` の `list_all_task_names` (タスク名列挙、`list` と共有) に集約。
+- 実装は `lib/cmd_switch.sh` の `cmd_switch` (解決) / `cmd_shell_init` (シェル関数出力) / `resolve_switch_target` (非 URL の解決) / `resolve_task_name` (prefix/substring マッチング) / `resolve_url_to_task` (URL 解決) / `find_tasks_by_branch` (ブランチ→タスク) / `find_tasks_for_issue` (issue→リンク PR/ブランチ→タスク) と、`lib/detect.sh` の `list_all_task_names` (タスク名列挙、`list` と共有) に集約。ブランチ/issue 解決はローカル git 読み取り (`find_tasks_by_branch`) と `gh` (`find_tasks_for_issue`, PR head 取得) を使う。
 
 `switch` は人間がシェルで `cd` するためのコマンドで、サブエージェント (Bash 呼び出しごとに CWD が独立) には適さないため、Claude Code 用の Skill は提供しない。
 
