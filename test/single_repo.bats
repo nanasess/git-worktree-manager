@@ -275,6 +275,23 @@ teardown_file() {
     assert_output --partial "master"
 }
 
+# bash grew negative array subscripts only in 4.2, so COMP_WORDS[COMP_CWORD-1]
+# with COMP_CWORD=0 would error on the 3.2 this script still targets. `complete
+# -F` never invokes us for word 0, but the guard must survive direct calls.
+@test "completion bash: COMP_CWORD=0 does not index COMP_WORDS negatively" {
+    cd "$SINGLE_REPO_DIR"
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '
+        eval "$(worktree completion bash)"
+        COMP_WORDS=(worktree)
+        COMP_CWORD=0
+        _worktree
+        echo "rc=$?"
+    '
+    assert_success
+    assert_output --partial "rc=0"
+    refute_output --partial "bad array subscript"
+}
+
 @test "completion bash: --branch-prefix value is not completed" {
     cd "$SINGLE_REPO_DIR"
     run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '

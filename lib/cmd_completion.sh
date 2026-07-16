@@ -68,7 +68,13 @@ _worktree() {
     local cur prev cmd i
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
-    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    # Guard COMP_CWORD=0 instead of letting COMP_WORDS[-1] be evaluated:
+    # bash only grew negative array subscripts in 4.2, so on 3.2 that would
+    # be a "bad array subscript" error rather than the last word.
+    prev=""
+    if [ "$COMP_CWORD" -gt 0 ]; then
+        prev="${COMP_WORDS[COMP_CWORD-1]}"
+    fi
 
     # --branch-prefix takes a free-form value; there is nothing to suggest.
     if [ "$prev" = "--branch-prefix" ]; then
@@ -162,9 +168,13 @@ _worktree_branches() {
     local -a branches
     local dir
     branches=(${(f)"$(git for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null)"})
-    for dir in */; do
-        [[ -e ${dir}.git ]] || continue
-        branches+=(${(f)"$(git -C $dir for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null)"})
+    # (N) applies NULL_GLOB to this expansion only. The completion system
+    # already sets NULL_GLOB, so this is belt-and-braces — but it keeps the
+    # function from aborting on `no matches found` if it is ever called
+    # outside a completion context (e.g. sourced by hand while debugging).
+    for dir in */(N); do
+        [[ -e "${dir}.git" ]] || continue
+        branches+=(${(f)"$(git -C "$dir" for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null)"})
     done
     branches=(${(u)branches:#})
     (( ${#branches} )) || return 1
@@ -256,7 +266,11 @@ _worktree() {
                         '(- *)'{-h,--help}'[Show help]' && ret=0
                     ;;
                 completion)
-                    _arguments '1:shell:(bash zsh)' && ret=0
+                    # -h/--help is offered here (unlike shell-init, which
+                    # parses no arguments) because cmd_completion implements it.
+                    _arguments \
+                        '(- *)'{-h,--help}'[Show help]' \
+                        '1:shell:(bash zsh)' && ret=0
                     ;;
             esac
             ;;
