@@ -36,6 +36,7 @@ worktree switch [name|branch|URL|-]
 worktree pull
 worktree install --skills [--global]
 worktree shell-init
+worktree completion <bash|zsh>
 ```
 
 `worktree list --merged --names-only` の出力は `worktree cleanup` の stdin にそのままパイプ可能 (1 行 1 task name)。マージ済み worktree をまとめて削除する用途で使う。`list --merged` は any-merged (1 つでもマージ済み sub-repo を含む) 判定で、`cleanup --merged` の all-merged 判定とは仕様が異なるため、パイプ削除時は未マージ sub-repo まで巻き込んで消える点に注意。
@@ -76,6 +77,18 @@ worktree shell-init
 - `_WORKTREE_CD_FILE` が未設定のとき `write_cd_target` は no-op。したがって**シェル統合なしの直接実行・サブエージェントの Bash 呼び出しでは一切 cd しない** (既存挙動を完全維持)。自動 cd が効くのは `shell-init` を入れた対話シェルだけ。
 - `checkout <branch>` (URL でないブランチ切替) は新ディレクトリを作らないので cd しない。issue URL は `cmd_create` 経由、PR URL は `cmd_checkout_pr` 末尾で `write_cd_target` を呼ぶ。
 - 自動 cd 後は `_WORKTREE_PREV` に元のディレクトリが入るため、`worktree switch -` で作成前の場所へ戻れる。
+
+## シェル補完 (worktree completion)
+
+`worktree completion <bash|zsh>` は補完スクリプトを stdout に出力する。`shell-init` と同じ「eval して使う」方式で、`~/.zshrc` / `~/.bashrc` に `eval "$(worktree completion zsh)"` を追加する (zsh は **compinit の後**)。zsh は `fpath` に `_worktree` として置く運用も可能。
+
+- **補完スクリプトはチェックイン済みファイルではなく `lib/cmd_completion.sh` から生成する**。コマンド定義と補完定義が同じバイナリに同梱され、乖離しない。**コマンド・オプションを追加したらここも更新する** (「コマンド追加・修正時のチェックリスト」参照)。
+- タスク名の候補は `worktree list --names-only` (= `list_all_task_names`) を呼んで得る。`list` / `switch` と候補集合が常に一致し、`gh` もリポジトリごとの git 呼び出しも走らないので対話補完に耐える速度。プロジェクト外では空を返すだけ (エラーにしない)。
+- `checkout` のブランチ補完はプロジェクトルート自身 (シングルリポ) と直下のサブリポ (マルチリポ) の `refs/heads` を集める。ツール側の検出ロジックを呼ばず補完スクリプト内で完結させ、CLI に内部用サブコマンドを増やさない方針。
+- **マッチングは prefix ベース** (`compgen` / `_describe`) で、`switch` の substring 解決より狭い。`switch login` は解決できるが `switch login<TAB>` は補完されない — シェル標準の挙動に合わせる意図的な差。
+- bash 側は **bash 3.2 互換**を保つ (連想配列・`_init_completion` 等の bash-completion ヘルパーを使わない)。バイナリ本体と違い、補完スクリプトを読むのは macOS の `/bin/bash` (3.2) かもしれず、bash-completion 未導入環境もあるため。
+- zsh 側は eval と fpath autoload の**両対応**: 先頭に `#compdef worktree` タグを置き、末尾で `funcstack[1]` を見て「autoload なら `_worktree` を実行 / eval なら `compdef` で登録」を分岐する。
+- `switch` と同様、これは人間がシェルで使う機能なので Claude Code 用 Skill は提供しない。
 
 ## base branch の決定ロジック
 
@@ -149,6 +162,7 @@ git submodule update --init --recursive
 2. **README.md 更新** — Usage セクションにコマンドの説明を追加・修正
 3. **CLAUDE.md 更新** — コマンド一覧を更新
 4. **Skills 更新** — `skills/` 配下の SKILL.md を追加・修正。`lib/cmd_install.sh` の Available skills 表示も更新
+5. **補完更新** — `lib/cmd_completion.sh` の bash / zsh 両スクリプトにサブコマンド・オプションを追加・修正 (`worktree` 本体の `usage()` とサブコマンド dispatch も忘れずに)
 
 ## 言語ルール
 

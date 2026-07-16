@@ -46,6 +46,7 @@ source "$SCRIPT_DIR/lib/cmd_install.sh"
 source "$SCRIPT_DIR/lib/cmd_pull.sh"
 source "$SCRIPT_DIR/lib/cmd_checkout.sh"
 source "$SCRIPT_DIR/lib/cmd_switch.sh"
+source "$SCRIPT_DIR/lib/cmd_completion.sh"
 
 VERSION="0.1.0"
 
@@ -64,6 +65,7 @@ usage() {
     echo "    pull                  Pull all repositories"
     echo "    install --skills      Install Claude Code skills"
     echo "    shell-init            Print shell integration for 'switch'"
+    echo "    completion <shell>    Print completion script (bash|zsh)"
     echo ""
     echo -e "${BOLD}OPTIONS:${NC}"
     echo "    -h, --help            Show help"
@@ -100,6 +102,9 @@ main() {
             ;;
         shell-init)
             cmd_shell_init "$@"
+            ;;
+        completion)
+            cmd_completion "$@"
             ;;
         pull)
             cmd_pull "$@"
