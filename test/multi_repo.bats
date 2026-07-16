@@ -147,6 +147,38 @@ teardown_file() {
     assert_output --partial "Invalid GitHub URL"
 }
 
+# completion in a multi-repo project: task names come from `list --names-only`,
+# so they are the task directories, matching what `switch` accepts.
+@test "completion bash: switch completes multi-repo task names" {
+    cd "$MULTI_REPO_DIR"
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '
+        eval "$(worktree completion bash)"
+        COMP_WORDS=(worktree switch "test")
+        COMP_CWORD=2
+        _worktree
+        printf "%s\n" "${COMPREPLY[@]}"
+    '
+    assert_success
+    assert_line "test-task"
+    assert_line "test-task2"
+}
+
+# The project root of a multi-repo project is not itself a git repo, so branch
+# completion has to descend into the sub-repos. test-task2 was created with
+# --branch-prefix ci/, giving a branch name no task name would produce.
+@test "completion bash: checkout collects branches from sub-repos" {
+    cd "$MULTI_REPO_DIR"
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '
+        eval "$(worktree completion bash)"
+        COMP_WORDS=(worktree checkout "ci/")
+        COMP_CWORD=2
+        _worktree
+        printf "%s\n" "${COMPREPLY[@]}"
+    '
+    assert_success
+    assert_output --partial "ci/test-task2"
+}
+
 @test "pull: exits 0" {
     cd "$MULTI_REPO_DIR"
     run "$WORKTREE_CMD" pull

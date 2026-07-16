@@ -149,6 +149,161 @@ teardown_file() {
     assert_output --partial "create|checkout|co"
 }
 
+# completion: the printed scripts are what the user evals, so their shape is
+# part of the contract (bash registers via `complete`, zsh via `#compdef` +
+# `compdef`). The functional tests below drive the emitted function directly.
+@test "completion bash: prints a script that registers the completer" {
+    run "$WORKTREE_CMD" completion bash
+    assert_success
+    assert_output --partial "_worktree()"
+    assert_output --partial "complete -F _worktree worktree"
+}
+
+@test "completion zsh: prints a script usable via compdef and fpath" {
+    run "$WORKTREE_CMD" completion zsh
+    assert_success
+    # The tag makes the script valid as an fpath `_worktree` file; the compdef
+    # branch is what makes the same output work when eval'd.
+    assert_output --partial "#compdef worktree"
+    assert_output --partial "compdef _worktree worktree"
+}
+
+@test "completion: missing shell name fails with usage" {
+    run "$WORKTREE_CMD" completion
+    assert_failure
+    assert_output --partial "Shell name required"
+}
+
+@test "completion: unsupported shell fails" {
+    run "$WORKTREE_CMD" completion fish
+    assert_failure
+    assert_output --partial "Unsupported shell: fish"
+}
+
+# Functional: drive _worktree the way bash would. The completer shells out to
+# `worktree list --names-only`, so the binary must be reachable on PATH.
+@test "completion bash: switch completes worktree task names" {
+    cd "$SINGLE_REPO_DIR"
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '
+        eval "$(worktree completion bash)"
+        COMP_WORDS=(worktree switch "")
+        COMP_CWORD=2
+        _worktree
+        printf "%s\n" "${COMPREPLY[@]}"
+    '
+    assert_success
+    assert_output --partial "feature/slash-test"
+}
+
+@test "completion bash: cleanup completes worktree task names" {
+    cd "$SINGLE_REPO_DIR"
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '
+        eval "$(worktree completion bash)"
+        COMP_WORDS=(worktree cleanup "feature/")
+        COMP_CWORD=2
+        _worktree
+        printf "%s\n" "${COMPREPLY[@]}"
+    '
+    assert_success
+    # A slash-bearing task name completes as one word: '/' is not in
+    # COMP_WORDBREAKS, so the candidate is the full task name.
+    assert_output "feature/slash-test"
+}
+
+# Completion is prefix-based (compgen), which is narrower than `switch`'s
+# substring resolution: 'slash' resolves as a switch argument but is not a
+# completion candidate for 'feature/slash-test'.
+@test "completion bash: task names complete on prefix, not substring" {
+    cd "$SINGLE_REPO_DIR"
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '
+        eval "$(worktree completion bash)"
+        COMP_WORDS=(worktree switch "slash")
+        COMP_CWORD=2
+        _worktree
+        printf "%s\n" "${COMPREPLY[@]}"
+    '
+    assert_success
+    assert_output ""
+}
+
+@test "completion bash: first word completes subcommands" {
+    cd "$SINGLE_REPO_DIR"
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '
+        eval "$(worktree completion bash)"
+        COMP_WORDS=(worktree "c")
+        COMP_CWORD=1
+        _worktree
+        printf "%s\n" "${COMPREPLY[@]}"
+    '
+    assert_success
+    assert_line "create"
+    assert_line "cleanup"
+    assert_line "checkout"
+    assert_line "clean"
+    assert_line "co"
+    assert_line "completion"
+}
+
+@test "completion bash: options are completed per subcommand" {
+    cd "$SINGLE_REPO_DIR"
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '
+        eval "$(worktree completion bash)"
+        COMP_WORDS=(worktree cleanup "--")
+        COMP_CWORD=2
+        _worktree
+        printf "%s\n" "${COMPREPLY[@]}"
+    '
+    assert_success
+    assert_line "--merged"
+    assert_line "--delete-branches"
+    assert_line "--dry-run"
+    assert_line "--force"
+    # `list`-only options must not leak into `cleanup`.
+    refute_line "--names-only"
+}
+
+@test "completion bash: checkout completes local branch names" {
+    cd "$SINGLE_REPO_DIR"
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '
+        eval "$(worktree completion bash)"
+        COMP_WORDS=(worktree checkout "mas")
+        COMP_CWORD=2
+        _worktree
+        printf "%s\n" "${COMPREPLY[@]}"
+    '
+    assert_success
+    assert_output --partial "master"
+}
+
+@test "completion bash: --branch-prefix value is not completed" {
+    cd "$SINGLE_REPO_DIR"
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" bash -c '
+        eval "$(worktree completion bash)"
+        COMP_WORDS=(worktree create --branch-prefix "")
+        COMP_CWORD=3
+        _worktree
+        printf "%s\n" "${COMPREPLY[@]}"
+    '
+    assert_success
+    assert_output ""
+}
+
+# The zsh script must parse and register under a real zsh + compinit. Driving
+# the completion itself needs a pty, which is out of scope here.
+@test "completion zsh: script loads and registers with compdef" {
+    if ! command -v zsh >/dev/null 2>&1; then
+        skip "zsh not available"
+    fi
+    run env PATH="$(dirname "$WORKTREE_CMD"):$PATH" zsh -f -c '
+        autoload -Uz compinit; compinit -u -d "${TMPDIR:-/tmp}/wt-zcompdump-$$"
+        eval "$(worktree completion zsh)"
+        print -r -- "comps=${_comps[worktree]:-NONE}"
+        rm -f "${TMPDIR:-/tmp}/wt-zcompdump-$$"
+    '
+    assert_success
+    assert_output --partial "comps=_worktree"
+}
+
 # Auto-cd: create records the destination worktree in _WORKTREE_CD_FILE, which
 # the shell function reads to perform the cd. The binary itself never cd's.
 @test "create: records cd target when _WORKTREE_CD_FILE is set" {

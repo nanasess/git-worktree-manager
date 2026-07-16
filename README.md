@@ -40,6 +40,10 @@ ln -sf ~/git-repos/git-worktree-manager/worktree ~/.local/bin/worktree
 # Enable `worktree switch` (cd into worktrees) — add to ~/.zshrc or ~/.bashrc
 eval "$(worktree shell-init)"
 
+# Enable tab completion (subcommands, options, task names) — same rc file
+eval "$(worktree completion zsh)"    # zsh: must come after compinit
+eval "$(worktree completion bash)"   # bash
+
 # Create worktrees for a task
 cd ~/git-repos/my-project
 worktree create feature-login
@@ -228,6 +232,40 @@ path (and a hint) instead of changing directory.
 (like `cd -`, but scoped to worktree switches). With no argument, `switch` opens
 an [`fzf`](https://github.com/junegunn/fzf) picker when one is available and a
 terminal is attached; otherwise it prints the list of worktree names.
+
+### `worktree completion <bash|zsh>`
+
+```bash
+# zsh — add to ~/.zshrc, after compinit
+eval "$(worktree completion zsh)"
+
+# zsh — or install into fpath instead, so startup pays nothing
+worktree completion zsh > "${fpath[1]}/_worktree"
+
+# bash — add to ~/.bashrc
+eval "$(worktree completion bash)"
+```
+
+Prints a tab-completion script for the given shell. It completes subcommands
+(including aliases like `sw` / `co`), each subcommand's options, and — the point
+of it — **worktree task names**:
+
+| Context | Completes |
+|---|---|
+| `worktree <TAB>` | subcommands |
+| `worktree switch <TAB>`, `worktree cleanup <TAB>` | task names of the current project |
+| `worktree checkout <TAB>` | local branch names (all sub-repos in a multi-repo project) |
+| `worktree create --<TAB>`, `worktree list --<TAB>`, … | that subcommand's options |
+
+Task names come from `worktree list --names-only`, so completion always agrees
+with what `switch` and `cleanup` accept. Outside a project (no
+`<project>.worktrees/`) it simply completes nothing. Matching is prefix-based,
+which is narrower than `switch`'s substring resolution: `worktree switch fea<TAB>`
+completes `feature/login`, while `worktree switch login` still resolves it.
+
+The zsh script works both ways — `eval`'d as above, or dropped into an `fpath`
+directory as `_worktree` for lazy autoloading. It requires `compinit` to have run
+first; put the `eval` after it in your `~/.zshrc`.
 
 ### `worktree pull`
 
