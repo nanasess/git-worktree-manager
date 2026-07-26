@@ -362,7 +362,7 @@ cmd_checkout_pr() {
             echo ""
             log_info "Installing dependencies..."
             log_info "${matching_repo_display} (${deps_types_csv}):"
-            install_deps "$worktree_path" || true
+            install_deps "$worktree_path" "$task_dir" || true
         fi
     else
         echo ""

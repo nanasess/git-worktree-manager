@@ -342,6 +342,21 @@ mutually exclusive and resolved with priority `npm > pnpm > yarn`.
 
 Skip with `--no-install`.
 
+### mise-managed Toolchains
+
+If a mise config (`mise.toml`, `mise.local.toml`, `.tool-versions`, ...) applies to the
+worktree, the install commands run through `mise exec --`. A worktree is created by a
+separate process, so the shell hook that puts mise-managed tools on `PATH` never fires
+there and commands such as `dotnet restore` would otherwise fail with
+`command not found`.
+
+The config is also passed to `mise trust` first: a worktree is a brand new absolute path,
+so a config trusted in the project root is untrusted there, and `mise exec` aborts on an
+untrusted config instead of prompting. Note that this trusts the config as checked out —
+including on a contributor's branch via `worktree checkout <PR URL>`. Set
+`WORKTREE_NO_MISE=1` to skip mise entirely and run the package managers straight from
+`PATH`.
+
 ## mise Version Inheritance
 
 If `mise.toml` or `mise.local.toml` exists in the source (project root for single-repo, each sub-repo root for multi-repo), `worktree create` copies it into the new worktree. This keeps mise-managed tool versions consistent even when the config is gitignored.
