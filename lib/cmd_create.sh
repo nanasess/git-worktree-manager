@@ -283,7 +283,7 @@ cmd_create() {
             deps_types_csv="$(detect_deps_types "$worktree_path" | paste -sd, -)"
             if [ -n "$deps_types_csv" ]; then
                 log_info "${repo} (${deps_types_csv}):"
-                install_deps "$worktree_path" || true
+                install_deps "$worktree_path" "$task_dir" || true
             fi
         done
     elif [ "$no_install" = true ]; then

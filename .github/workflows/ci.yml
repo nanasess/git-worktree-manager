@@ -15,6 +15,26 @@ permissions:
   issues: read
 
 jobs:
+  test-deps:
+    # Unit tests for lib/deps.sh. No network and no clone, so they run on both
+    # platforms cheaply.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: true
+      - name: Install modern Bash (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install bash
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+      - name: Run deps unit tests
+        run: ./test/bats/bin/bats test/deps.bats
+
   test-single-repo:
     # Run on both Linux and macOS: macOS ships BSD userland (e.g. readlink
     # without -f), so it guards against Linux-only assumptions in the scripts.

@@ -18,7 +18,9 @@ setup() {
     # the pipe-to-`tail` exit status reflects the real package manager status.
     set -o pipefail
 
-    DEPS_TMP="$(mktemp -d)"
+    # Normalise the path the same way find_mise_configs does (`cd` + `pwd`), so
+    # comparisons hold on macOS where mktemp -d returns a symlinked path.
+    DEPS_TMP="$(cd "$(mktemp -d)" && pwd)"
 }
 
 teardown() {
@@ -30,6 +32,7 @@ teardown() {
         PATH="$SAVED_PATH"
         unset SAVED_PATH
     fi
+    unset WORKTREE_NO_MISE
 }
 
 # ---------------------------------------------------------------------------
@@ -134,6 +137,24 @@ EOF
     PATH="${STUB_BIN}:${PATH}"
 }
 
+# Shadow mise with a fake that records invocations. `mise exec -- <cmd>` runs
+# <cmd> so the stubbed package managers still report success, mirroring the
+# real behaviour of putting mise-managed tools on PATH.
+# Must be called after setup_stub_clis (it reuses $STUB_BIN / $PATH).
+setup_stub_mise() {
+    cat > "${STUB_BIN}/mise" <<EOF
+#!/bin/bash
+echo "mise \$*" >> "${DEPS_TMP}/calls.log"
+if [ "\$1" = "exec" ]; then
+    shift
+    [ "\$1" = "--" ] && shift
+    exec "\$@"
+fi
+exit 0
+EOF
+    chmod +x "${STUB_BIN}/mise"
+}
+
 @test "install_deps: composer + npm coexistence runs both" {
     setup_stub_clis
     touch "${DEPS_TMP}/package-lock.json"
@@ -192,4 +213,141 @@ EOF
     assert_success
     assert_output --partial "npm install failed"
     grep -q '^composer install' "${DEPS_TMP}/calls.log"
+}
+
+# ---------------------------------------------------------------------------
+# find_mise_configs
+# ---------------------------------------------------------------------------
+
+@test "find_mise_configs: no config emits nothing" {
+    run find_mise_configs "$DEPS_TMP"
+    assert_success
+    [ -z "$output" ]
+}
+
+@test "find_mise_configs: finds mise.toml in the directory itself" {
+    touch "${DEPS_TMP}/mise.toml"
+    run find_mise_configs "$DEPS_TMP"
+    assert_success
+    [ "$output" = "${DEPS_TMP}/mise.toml" ]
+}
+
+@test "find_mise_configs: finds mise.local.toml and .tool-versions" {
+    touch "${DEPS_TMP}/mise.local.toml" "${DEPS_TMP}/.tool-versions"
+    run find_mise_configs "$DEPS_TMP"
+    assert_success
+    assert_output --partial "${DEPS_TMP}/mise.local.toml"
+    assert_output --partial "${DEPS_TMP}/.tool-versions"
+}
+
+# Multi-repo layout: the config sits in the task directory (symlinked from the
+# project root) while installs run in a sub-repo below it.
+@test "find_mise_configs: walks up to the boundary" {
+    mkdir -p "${DEPS_TMP}/task/sub"
+    touch "${DEPS_TMP}/task/mise.toml"
+    run find_mise_configs "${DEPS_TMP}/task/sub" "${DEPS_TMP}/task"
+    assert_success
+    [ "$output" = "${DEPS_TMP}/task/mise.toml" ]
+}
+
+@test "find_mise_configs: without a boundary only the directory itself is searched" {
+    mkdir -p "${DEPS_TMP}/task/sub"
+    touch "${DEPS_TMP}/task/mise.toml"
+    run find_mise_configs "${DEPS_TMP}/task/sub"
+    assert_success
+    [ -z "$output" ]
+}
+
+@test "find_mise_configs: boundary that is not an ancestor is ignored" {
+    mkdir -p "${DEPS_TMP}/task/sub"
+    touch "${DEPS_TMP}/task/mise.toml"
+    run find_mise_configs "${DEPS_TMP}/task/sub" "/etc"
+    assert_success
+    [ -z "$output" ]
+}
+
+@test "find_mise_configs: trailing '.' path component is normalised" {
+    touch "${DEPS_TMP}/mise.toml"
+    run find_mise_configs "${DEPS_TMP}/." "$DEPS_TMP"
+    assert_success
+    [ "$output" = "${DEPS_TMP}/mise.toml" ]
+}
+
+# ---------------------------------------------------------------------------
+# install_deps + mise
+#
+# Regression: mise-managed toolchains (dotnet, node, ...) are not on PATH in a
+# freshly created worktree because the shell hook never fires there, so the
+# install used to die with "command not found".
+# ---------------------------------------------------------------------------
+
+@test "install_deps: runs through mise exec and trusts the config when mise.toml exists" {
+    setup_stub_clis
+    setup_stub_mise
+    touch "${DEPS_TMP}/mise.toml"
+    touch "${DEPS_TMP}/App.csproj"
+
+    run install_deps "$DEPS_TMP"
+    assert_success
+    assert_output --partial "Using mise"
+
+    grep -q "^mise trust ${DEPS_TMP}/mise.toml\$" "${DEPS_TMP}/calls.log"
+    grep -q '^mise exec -- dotnet restore$' "${DEPS_TMP}/calls.log"
+    # The tool itself still ran, through mise
+    grep -q '^dotnet restore$' "${DEPS_TMP}/calls.log"
+}
+
+@test "install_deps: uses the mise config found at the boundary" {
+    setup_stub_clis
+    setup_stub_mise
+    mkdir -p "${DEPS_TMP}/task/sub"
+    touch "${DEPS_TMP}/task/mise.toml"
+    touch "${DEPS_TMP}/task/sub/package-lock.json"
+
+    run install_deps "${DEPS_TMP}/task/sub" "${DEPS_TMP}/task"
+    assert_success
+
+    grep -q "^mise trust ${DEPS_TMP}/task/mise.toml\$" "${DEPS_TMP}/calls.log"
+    grep -q '^mise exec -- npm install' "${DEPS_TMP}/calls.log"
+}
+
+@test "install_deps: .tool-versions enables mise but is not trusted" {
+    setup_stub_clis
+    setup_stub_mise
+    touch "${DEPS_TMP}/.tool-versions"
+    touch "${DEPS_TMP}/package-lock.json"
+
+    run install_deps "$DEPS_TMP"
+    assert_success
+
+    grep -q '^mise exec -- npm install' "${DEPS_TMP}/calls.log"
+    ! grep -q '^mise trust' "${DEPS_TMP}/calls.log"
+}
+
+@test "install_deps: no mise config runs the package manager directly" {
+    setup_stub_clis
+    setup_stub_mise
+    touch "${DEPS_TMP}/package-lock.json"
+
+    run install_deps "$DEPS_TMP"
+    assert_success
+    refute_output --partial "Using mise"
+
+    grep -q '^npm install' "${DEPS_TMP}/calls.log"
+    ! grep -q '^mise' "${DEPS_TMP}/calls.log"
+}
+
+@test "install_deps: WORKTREE_NO_MISE=1 bypasses mise entirely" {
+    setup_stub_clis
+    setup_stub_mise
+    touch "${DEPS_TMP}/mise.toml"
+    touch "${DEPS_TMP}/package-lock.json"
+
+    export WORKTREE_NO_MISE=1
+    run install_deps "$DEPS_TMP"
+    assert_success
+    refute_output --partial "Using mise"
+
+    grep -q '^npm install' "${DEPS_TMP}/calls.log"
+    ! grep -q '^mise' "${DEPS_TMP}/calls.log"
 }

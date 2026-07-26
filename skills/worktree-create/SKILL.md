@@ -23,7 +23,7 @@ worktree create $ARGUMENTS
 5. Symlinks non-git items into the task directory (multi-repo only)
 6. Copies `mise.toml` / `mise.local.toml` into each worktree (inherits mise version pinning even when gitignored)
 7. Executes `.worktreerc` `post_create()` hook if present
-8. Auto-installs dependencies based on lock files (unless `--no-install`)
+8. Auto-installs dependencies based on lock files (unless `--no-install`). When a mise config applies to the worktree it is passed to `mise trust` and the install runs through `mise exec --`, so mise-managed toolchains resolve; `WORKTREE_NO_MISE=1` disables this
 
 ## Worktree layout
 

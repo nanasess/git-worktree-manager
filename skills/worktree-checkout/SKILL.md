@@ -52,6 +52,11 @@ worktree checkout https://github.com/owner/repo/pull/123 --no-cd
 | `--no-install` | Skip automatic dependency installation |
 | `--no-cd` | Do not auto-cd into the new worktree (interactive shells with `worktree shell-init` only) |
 
+> **Note (mise):** When a mise config applies to the new worktree, the dependency
+> install runs through `mise exec --` (after `mise trust`) so mise-managed
+> toolchains are on `PATH`. This trusts the config as checked out on the PR
+> branch; use `WORKTREE_NO_MISE=1` or `--no-install` for untrusted PRs.
+
 > **Note (subagents):** In URL mode, `checkout` auto-cds into the new worktree
 > only in an interactive shell that has `eval "$(worktree shell-init)"` installed.
 > From a subagent's `Bash` call there is no directory change, so `--no-cd` has no

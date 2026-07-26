@@ -126,6 +126,17 @@ create / checkout 時に Worktree Context（タスク名、作業ディレクト
 
 実装は `lib/deps.sh` の `detect_deps_types` (検出) と `install_deps` (実行) に集約されている。
 
+### mise 管理ツールチェーンの解決 (`mise exec`)
+
+worktree は別プロセスが作るディレクトリなので、`mise activate` のシェルフックが発火せず **mise 管理のツール (dotnet / node / php 等) が PATH に載らない**。そのまま `dotnet restore` を呼ぶと `command not found` で install が失敗していた。
+
+- worktree に効く mise 設定ファイルが見つかった場合、パッケージマネージャは `mise exec -- <cmd>` 経由で実行する (`run_deps_cmd` の第 1 引数以降にプレフィックスとして差し込む)。見つからない、あるいは `mise` が PATH に無い場合は従来どおり直接実行。
+- 実行前に **`mise trust <config>` を実行する**。worktree は新しい絶対パスなのでプロジェクトルートで信頼済みの設定でも untrusted 扱いになり、`mise exec` は非対話環境ではプロンプトを出さず **エラー終了する** ため。`[env]` やテンプレートを含む設定で必須。`.tool-versions` はコード実行要素が無いので trust 対象外。
+- **設定探索は `find_mise_configs <dir> [boundary]`** が担当し、`<dir>` から `<boundary>` (= task ディレクトリ) まで遡って探す。マルチリポでは mise.toml が task ディレクトリ側 (プロジェクトルートからの symlink) にあり、install はサブリポ内で走るため。boundary を超えて `/` まで遡らないので、ホーム配下の無関係な設定を拾わない。
+- `install_deps <dir> [config-root]` の第 2 引数が boundary。`cmd_create.sh` / `cmd_checkout.sh` は `$task_dir` を渡す。
+- **`WORKTREE_NO_MISE=1` で mise 連携全体を無効化**できる (常に PATH から直接実行)。
+- セキュリティ上の注意: `worktree checkout <PR URL>` では **PR ブランチ側の mise 設定を trust する**ことになる。`npm install` / `composer install` 自体が既に任意コード実行なので相対的なリスク増は小さいが、信頼できない PR を扱う場合は `WORKTREE_NO_MISE=1` か `--no-install` を使う。
+
 ## mise 設定の引き継ぎ
 
 `worktree create` は、ソース側に `mise.toml` / `mise.local.toml` が存在する場合、それらを新しい worktree にコピーする。gitignored なローカル上書き (`mise.local.toml` など) でも、mise のバージョン固定を引き継げる。
